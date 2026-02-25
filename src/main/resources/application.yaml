@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: dzipsa
+  datasource:
+    url: jdbc:mysql://localhost:3306/jerry_db
+    username: root
+    password: goormgoorm
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show_sql: true
+    properties:
+      hibernate:
+        format_sql: true

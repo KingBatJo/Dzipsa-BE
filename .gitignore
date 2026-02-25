@@ -1,0 +1,28 @@
+### JetBrains IDE (IntelliJ) ###
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+### Gradle ###
+.gradle/
+build/
+
+### Java ###
+*.class
+*.log
+*.ctxt
+*.jar
+*.war
+*.zip
+*.tar.gz
+*.rar
+
+### Environment Variables (보안용) ###
+*.env
+application-local.yml
+application-secret.yml
+
+### MacOS ###
+.DS_Store
