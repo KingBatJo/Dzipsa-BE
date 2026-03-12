@@ -1,16 +1,83 @@
 spring:
   application:
     name: dzipsa
+    
   datasource:
-    url: jdbc:mysql://localhost:3306/jerry_db
-    username: root
-    password: goormgoorm
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT}/${DB_NAME}?serverTimezone=Asia/Seoul&characterEncoding=UTF-8&allowPublicKeyRetrieval=true&useSSL=false
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
+  # JPA & Hibernate 설정
   jpa:
+    database-platform: org.hibernate.dialect.MySQLDialect
     hibernate:
-      ddl-auto: create-drop
-    show_sql: true
+      ddl-auto: create
     properties:
       hibernate:
         format_sql: true
+        show_sql: true
+        use_sql_comments: true
+    open-in-view: false
+
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT}
+
+  # OAuth2
+  security:
+    oauth2:
+      client:
+        registration:
+          naver:
+            client-id: ${CLIENT_ID_NAVER}
+            client-secret: ${CLIENT_SECRET_NAVER}
+            client-authentication-method: client_secret_post
+            authorization-grant-type: authorization_code
+            redirect-uri: ${REDIRECT_URI}
+            scope:
+              - nickname
+              - email
+            client-name: Naver
+          kakao:
+            client-id: ${CLIENT_ID_KAKAO}
+            client-secret: ${CLIENT_SECRET_KAKAO}
+            client-authentication-method: client_secret_post
+            authorization-grant-type: authorization_code
+            redirect-uri: ${REDIRECT_URI}
+            scope: profile_nickname, account_email
+            client-name: Kakao
+        provider:
+          naver:
+            authorization-uri: https://nid.naver.com/oauth2.0/authorize
+            token-uri: https://nid.naver.com/oauth2.0/token
+            user-info-uri: https://openapi.naver.com/v1/nid/me
+            user-name-attribute: response
+          kakao:
+            authorization-uri: https://kauth.kakao.com/oauth/authorize
+            token-uri: https://kauth.kakao.com/oauth/token
+            user-info-uri: https://kapi.kakao.com/v2/user/me
+            user-name-attribute: id
+
+jwt:
+  access-secret: ${JWT_ACCSECRET}
+  refresh-secret: ${JWT_REFSECRET}
+  access-token-expiration: 1800000      # 30분
+  refresh-token-expiration: 604800000   # 7일
+
+app:
+  oauth2:
+    redirect-uri: ${OAUTH2_FRONT_REDIRECT_URI:http://localhost:5173/oauth/callback}
+  cookie:
+    secure: ${COOKIE_SECURE:true}
+    same-site: ${COOKIE_SAMESITE:None}
+
+
+cors:
+  allowed-origins: ${FRONTEND_URL:https://dzipsa.vercel.app, http://localhost:5173}
+
+logging:
+  level:
+    root: info
+    org.hibernate.SQL: debug
