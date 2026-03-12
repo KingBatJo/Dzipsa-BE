@@ -68,9 +68,11 @@ jwt:
 
 app:
   oauth2:
-    # 로그인 성공/실패 후 리다이렉트될 '프론트엔드' 주소입니다.
-    # OAUTH2_FRONT_REDIRECT_URI 환경변수가 없으면 로컬 개발용 주소(http://localhost:5173/oauth/callback)를 사용합니다.
     redirect-uri: ${OAUTH2_FRONT_REDIRECT_URI:http://localhost:5173/oauth/callback}
+  cookie:
+    secure: ${COOKIE_SECURE:true}
+    same-site: ${COOKIE_SAMESITE:None}
+
 
 cors:
   allowed-origins: ${FRONTEND_URL:https://dzipsa.vercel.app, http://localhost:5173}
