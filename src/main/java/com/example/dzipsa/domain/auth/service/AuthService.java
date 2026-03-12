@@ -6,6 +6,7 @@ import com.example.dzipsa.domain.auth.dto.response.TokenResponse;
 import com.example.dzipsa.domain.auth.entity.RefreshToken;
 import com.example.dzipsa.domain.auth.repository.RefreshTokenRepository;
 import com.example.dzipsa.domain.user.entity.User;
+import com.example.dzipsa.domain.user.entity.enums.UserRole;
 import com.example.dzipsa.domain.user.repository.UserRepository;
 import com.example.dzipsa.global.exception.BusinessException;
 import com.example.dzipsa.global.exception.domain.AuthErrorCode;
@@ -37,23 +38,15 @@ public class AuthService {
     private final RedisUtil redisUtil;
 
     @Transactional
-    public TokenResponse issueTokenResponse(User user) {
-        log.debug("[AuthService] issueTokenResponse userId={}", user.getId());
-        String accessToken = jwtTokenProvider.createAccessToken(
-                user.getId(),
-                user.getEmail(),
-                user.getRole()
-        );
-        String refreshToken = jwtTokenProvider.createRefreshToken(
-                user.getId(),
-                user.getEmail(),
-                user.getRole()
-        );
+    public TokenResponse issueTokenResponse(Long userId, String email, UserRole role) {
+        log.debug("[AuthService] issueTokenResponse userId={}", userId);
+        String accessToken = jwtTokenProvider.createAccessToken(userId, email, role);
+        String refreshToken = jwtTokenProvider.createRefreshToken(userId, email, role);
 
-        refreshTokenRepository.deleteByUserId(user.getId());
+        refreshTokenRepository.deleteByUserId(userId);
         LocalDateTime now = LocalDateTime.now();
         refreshTokenRepository.save(RefreshToken.builder()
-                .userId(user.getId())
+                .userId(userId)
                 .token(refreshToken)
                 .createdAt(now)
                 .expiredAt(now.plusDays(REFRESH_TOKEN_VALID_DAYS))
@@ -92,18 +85,19 @@ public class AuthService {
             }
         }
 
-        return issueTokenResponse(user);
+        return issueTokenResponse(user.getId(), user.getEmail(), user.getRole());
     }
 
     @Transactional
     public void logout(String refreshToken, String accessToken) {
         log.info("[AuthService] logout 요청");
         
-        // 1. Refresh Token 삭제
-        refreshTokenRepository.findByToken(refreshToken)
-                .ifPresent(refreshTokenRepository::delete);
+        if (StringUtils.hasText(refreshToken)) {
+            refreshTokenRepository.findByToken(refreshToken)
+                    .ifPresent(refreshTokenRepository::delete);
+        }
 
-        // 2. Access Token Blacklist 처리
+        // Access Token Blacklist 처리
         if (StringUtils.hasText(accessToken) && jwtTokenProvider.validateAccessToken(accessToken)) {
             Date expiration = jwtTokenProvider.getExpirationDateFromAccessToken(accessToken);
             long expirationTime = (expiration.getTime() - System.currentTimeMillis()) / 1000 / 60;
