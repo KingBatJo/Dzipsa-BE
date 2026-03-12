@@ -8,6 +8,7 @@ import com.example.dzipsa.domain.user.dto.response.UserResponse;
 import com.example.dzipsa.domain.user.entity.User;
 import com.example.dzipsa.domain.user.service.UserService;
 import com.example.dzipsa.global.exception.dto.ErrorResponse;
+import com.example.dzipsa.global.util.CookieUtil;
 
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -41,6 +42,7 @@ public class AuthController {
 
     private final AuthService authService;
     private final UserService userService;
+    private final CookieUtil cookieUtil;
 
     @GetMapping("/check")
     @Operation(summary = "Access Token 유효성 검증", description = "헤더의 Access Token이 유효한지 검증합니다. 유효하면 200 OK, 아니면 401 Unauthorized를 반환합니다.")
@@ -77,15 +79,8 @@ public class AuthController {
         String oldAccessToken = resolveToken(request);
         TokenResponse tokenResponse = authService.refresh(new RefreshTokenRequest(refreshToken), oldAccessToken);
 
-        // Refresh Token 쿠키 설정 (Rotation 적용)
-        ResponseCookie refreshTokenCookie = ResponseCookie.from("refreshToken", tokenResponse.getRefreshToken())
-                .path("/")
-                .httpOnly(true)
-                .secure(true)
-                .sameSite("None")
-                .maxAge(14 * 24 * 60 * 60) // 14일
-                .build();
-
+        // Refresh Token 쿠키 생성
+        ResponseCookie refreshTokenCookie = cookieUtil.createRefreshTokenCookie(tokenResponse.getRefreshToken());
         response.addHeader("Set-Cookie", refreshTokenCookie.toString());
 
         // Access Token은 응답 바디로 반환
@@ -104,11 +99,16 @@ public class AuthController {
     public ResponseEntity<Void> logout(
             @Parameter(description = "Refresh Token (Cookie)", required = false)
             @CookieValue(value = "refreshToken", required = false) String refreshToken,
-            HttpServletRequest request) {
+            HttpServletRequest request,
+            HttpServletResponse response) {
         log.info("[AuthController] logout 요청");
         String accessToken = resolveToken(request);
-        // refreshToken이 쿠키에 없어도 로그아웃은 진행 (Access Token 블랙리스트 처리는 해야 하므로)
+        
         authService.logout(refreshToken, accessToken);
+        
+        // 쿠키 삭제
+        response.addHeader("Set-Cookie", cookieUtil.deleteRefreshTokenCookie().toString());
+
         return ResponseEntity.ok().build();
     }
 

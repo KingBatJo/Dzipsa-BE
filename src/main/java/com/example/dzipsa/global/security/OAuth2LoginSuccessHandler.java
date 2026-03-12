@@ -2,6 +2,7 @@ package com.example.dzipsa.global.security;
 
 import com.example.dzipsa.domain.auth.dto.response.TokenResponse;
 import com.example.dzipsa.domain.auth.service.AuthService;
+import com.example.dzipsa.global.util.CookieUtil;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -24,6 +25,7 @@ import java.io.IOException;
 public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
 
     private final AuthService authService;
+    private final CookieUtil cookieUtil;
 
     @Value("${app.oauth2.redirect-uri}")
     private String redirectUri;
@@ -33,25 +35,17 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                                         Authentication authentication) throws IOException {
         CustomPrincipal principal = (CustomPrincipal) authentication.getPrincipal();
         
-        // CustomPrincipal에서 필요한 정보 추출하여 토큰 발급 요청
         TokenResponse tokenResponse = authService.issueTokenResponse(
                 principal.getUserId(), 
                 principal.getEmail(), 
                 principal.getRole()
         );
 
-        // Refresh Token 쿠키 설정 (httpOnly=true, Secure=true, SameSite=None)
-        ResponseCookie refreshTokenCookie = ResponseCookie.from("refreshToken", tokenResponse.getRefreshToken())
-                .path("/")
-                .httpOnly(true)
-                .secure(true)
-                .sameSite("None")
-                .maxAge(14 * 24 * 60 * 60) // 14일
-                .build();
-
+        // Refresh Token 쿠키 생성
+        ResponseCookie refreshTokenCookie = cookieUtil.createRefreshTokenCookie(tokenResponse.getRefreshToken());
         response.addHeader("Set-Cookie", refreshTokenCookie.toString());
 
-        // 신규 가입 여부, Access Token 파라미터 추가
+        // Access Token은 URL 파라미터로 전달
         String targetUrl = UriComponentsBuilder.fromUriString(redirectUri)
                 .queryParam("accessToken", tokenResponse.getAccessToken())
                 .queryParam("created", principal.isNewUser())
