@@ -1,6 +1,7 @@
 package com.example.dzipsa.global.security;
 
 import com.example.dzipsa.domain.user.entity.User;
+import com.example.dzipsa.domain.user.entity.enums.UserRole;
 
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
@@ -15,12 +16,16 @@ import lombok.Getter;
 @Getter
 public class CustomPrincipal implements OAuth2User {
 
-    private final User user;
+    private final Long userId;
+    private final String email;
+    private final UserRole role;
     private final Map<String, Object> attributes;
-    private final boolean isNewUser; // 신규 가입 여부 추가
+    private final boolean isNewUser;
 
     public CustomPrincipal(User user, Map<String, Object> attributes, boolean isNewUser) {
-        this.user = user;
+        this.userId = user.getId();
+        this.email = user.getEmail();
+        this.role = user.getRole(); // 트랜잭션 안에서 값을 미리 꺼내 저장 (Lazy Loading 방지)
         this.attributes = attributes != null ? attributes : Collections.emptyMap();
         this.isNewUser = isNewUser;
     }
@@ -33,12 +38,12 @@ public class CustomPrincipal implements OAuth2User {
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return Collections.singletonList(
-                new SimpleGrantedAuthority("ROLE_" + user.getRole().name())
+                new SimpleGrantedAuthority("ROLE_" + role.name())
         );
     }
 
     @Override
     public String getName() {
-        return user.getEmail();
+        return email;
     }
 }

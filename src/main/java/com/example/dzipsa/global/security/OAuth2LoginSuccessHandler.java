@@ -32,8 +32,13 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                         Authentication authentication) throws IOException {
         CustomPrincipal principal = (CustomPrincipal) authentication.getPrincipal();
-        TokenResponse tokenResponse = authService.issueTokenResponse(principal.getUser());
-
+        
+        // CustomPrincipal에서 필요한 정보 추출하여 토큰 발급 요청
+        TokenResponse tokenResponse = authService.issueTokenResponse(
+                principal.getUserId(), 
+                principal.getEmail(), 
+                principal.getRole()
+        );
 
         // Refresh Token 쿠키 설정 (httpOnly=true, Secure=true, SameSite=None)
         ResponseCookie refreshTokenCookie = ResponseCookie.from("refreshToken", tokenResponse.getRefreshToken())
@@ -41,7 +46,7 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                 .httpOnly(true)
                 .secure(true)
                 .sameSite("None")
-                .maxAge(7 * 24 * 60 * 60) // 7일
+                .maxAge(14 * 24 * 60 * 60) // 14일
                 .build();
 
         response.addHeader("Set-Cookie", refreshTokenCookie.toString());
@@ -54,6 +59,12 @@ public class OAuth2LoginSuccessHandler extends SimpleUrlAuthenticationSuccessHan
                 .toUriString();
 
         log.info("[OAuth2LoginSuccessHandler] 로그인 성공, created={}, 리다이렉트: {}", principal.isNewUser(), targetUrl);
+        
+        if (response.isCommitted()) {
+            log.warn("[OAuth2LoginSuccessHandler] 응답이 이미 커밋되어 리다이렉트 할 수 없습니다.");
+            return;
+        }
+
         getRedirectStrategy().sendRedirect(request, response, targetUrl);
     }
 }
