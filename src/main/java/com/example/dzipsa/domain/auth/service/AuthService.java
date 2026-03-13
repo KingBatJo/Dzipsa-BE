@@ -4,6 +4,7 @@ import com.example.dzipsa.domain.auth.converter.AuthConverter;
 import com.example.dzipsa.domain.auth.dto.request.RefreshTokenRequest;
 import com.example.dzipsa.domain.auth.dto.response.TokenResponse;
 import com.example.dzipsa.domain.auth.entity.RefreshToken;
+import com.example.dzipsa.domain.auth.repository.OAuthAccountRepository;
 import com.example.dzipsa.domain.auth.repository.RefreshTokenRepository;
 import com.example.dzipsa.domain.user.entity.User;
 import com.example.dzipsa.domain.user.entity.enums.UserRole;
@@ -33,6 +34,7 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final OAuthAccountRepository oAuthAccountRepository;
     private final JwtTokenProvider jwtTokenProvider;
     private final AuthConverter authConverter;
     private final RedisUtil redisUtil;
@@ -106,5 +108,33 @@ public class AuthService {
                 log.info("[AuthService] Access Token 블랙리스트 처리 완료 (logout)");
             }
         }
+    }
+
+    @Transactional
+    public void withdraw(Long userId, String accessToken) {
+        log.info("[AuthService] withdraw 요청 userId={}", userId);
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BusinessException(UserErrorCode.USER_NOT_FOUND));
+
+        // 1. 소셜 연동 정보 삭제 (재가입을 위해)
+        oAuthAccountRepository.findByUserId(userId).ifPresent(oAuthAccountRepository::delete);
+
+        // 2. 리프레시 토큰 삭제
+        refreshTokenRepository.deleteByUserId(userId);
+
+        // 3. 유저 상태 변경 (논리적 삭제)
+        user.withdraw();
+
+        // 4. Access Token Blacklist 처리
+        if (StringUtils.hasText(accessToken) && jwtTokenProvider.validateAccessToken(accessToken)) {
+            Date expiration = jwtTokenProvider.getExpirationDateFromAccessToken(accessToken);
+            long expirationTime = (expiration.getTime() - System.currentTimeMillis()) / 1000 / 60;
+            if (expirationTime > 0) {
+                redisUtil.setBlackList(accessToken, "withdraw", expirationTime);
+                log.info("[AuthService] Access Token 블랙리스트 처리 완료 (withdraw)");
+            }
+        }
+        log.info("[AuthService] 회원 탈퇴 처리 완료. userId={}", userId);
     }
 }

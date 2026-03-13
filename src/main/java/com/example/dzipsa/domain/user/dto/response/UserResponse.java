@@ -20,4 +20,6 @@ public class UserResponse {
     private ProviderType providerType;
     private String profileImageUrl;
     private UserRole role;
+    private boolean terms_agreed;
+
 }

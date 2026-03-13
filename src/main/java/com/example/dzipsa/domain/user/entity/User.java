@@ -36,7 +36,8 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false, unique = true, length = 100)
+    // unique = true 제거됨
+    @Column(nullable = false, length = 100)
     private String email;
 
     @Column(nullable = false, length = 50)
@@ -53,8 +54,6 @@ public class User {
     private String profileImageUrl;
 
     private boolean terms_agreed;
-
-    private boolean marketing_agreed;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
@@ -87,6 +86,17 @@ public class User {
     public void updateProfile(String nickname, String profileImageUrl) {
         this.nickname = nickname;
         this.profileImageUrl = profileImageUrl;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void withdraw() {
+        this.status = UserStatus.DELETED;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void rejoin(String nickname) {
+        this.status = UserStatus.ACTIVE;
+        this.nickname = nickname;
         this.updatedAt = LocalDateTime.now();
     }
 }
