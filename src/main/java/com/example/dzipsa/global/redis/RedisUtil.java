@@ -35,4 +35,23 @@ public class RedisUtil {
         return redisTemplate.opsForValue().get(BLACKLIST_PREFIX + accessToken);
     }
 
+    // --- General ---
+
+    public void set(String key, String value, long expirationTime, TimeUnit timeUnit) {
+        redisTemplate.opsForValue().set(key, value, expirationTime, timeUnit);
+    }
+
+    public String get(String key) {
+        Object value = redisTemplate.opsForValue().get(key);
+        return value != null ? String.valueOf(value) : null;
+    }
+
+    public boolean hasKey(String key) {
+        return redisTemplate.hasKey(key);
+    }
+
+    public void delete(String key) {
+        redisTemplate.delete(key);
+    }
+
 }
