@@ -15,6 +15,7 @@ public class UserConverter {
                 .nickname(user.getNickname())
                 .providerType(user.getProviderType())
                 .profileImageUrl(user.getProfileImageUrl())
+                .terms_agreed(user.isTerms_agreed())
                 .role(user.getRole())
                 .build();
     }
