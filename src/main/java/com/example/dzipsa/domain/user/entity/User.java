@@ -53,7 +53,7 @@ public class User {
 
     private String profileImageUrl;
 
-    private boolean terms_agreed;
+    private boolean termsAgreed;
 
     @Enumerated(EnumType.STRING)
     @Column(length = 20)
@@ -86,6 +86,11 @@ public class User {
     public void updateProfile(String nickname, String profileImageUrl) {
         this.nickname = nickname;
         this.profileImageUrl = profileImageUrl;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void agreeTerms() {
+        this.termsAgreed = true;
         this.updatedAt = LocalDateTime.now();
     }
 
