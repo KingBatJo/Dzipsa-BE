@@ -21,5 +21,6 @@ public class UserResponse {
     private String profileImageUrl;
     private UserRole role;
     private boolean terms_agreed;
+    private boolean hasRoom;
 
 }
