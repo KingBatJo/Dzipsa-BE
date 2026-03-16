@@ -28,6 +28,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.CookieValue;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -110,6 +111,32 @@ public class AuthController {
         response.addHeader("Set-Cookie", cookieUtil.deleteRefreshTokenCookie().toString());
 
         return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/withdraw")
+    @Operation(summary = "회원 탈퇴", description = "회원 정보를 비활성화하고 관련 토큰을 모두 삭제합니다.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "회원 탈퇴 성공"),
+            @ApiResponse(responseCode = "401", description = "인증되지 않은 사용자",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+    })
+    public ResponseEntity<Void> withdraw(
+            @Parameter(hidden = true) @AuthenticationPrincipal User user,
+            HttpServletRequest request,
+            HttpServletResponse response) {
+        log.info("[AuthController] withdraw 요청 user={}", user != null ? user.getId() : "null");
+        if (user == null) {
+            log.warn("[AuthController] withdraw 인증 없음");
+            return ResponseEntity.status(401).build();
+        }
+        String accessToken = resolveToken(request);
+
+        authService.withdraw(user.getId(), accessToken);
+
+        // 쿠키 삭제
+        response.addHeader("Set-Cookie", cookieUtil.deleteRefreshTokenCookie().toString());
+
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/me")

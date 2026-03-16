@@ -41,15 +41,15 @@ public class SecurityConfig {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(AbstractHttpConfigurer::disable)
-            .formLogin(AbstractHttpConfigurer::disable) // 폼 로그인 비활성화
-            .httpBasic(AbstractHttpConfigurer::disable) // HTTP Basic 비활성화
+            .formLogin(AbstractHttpConfigurer::disable) // 폼 로그인 비활성화 (DevLoginController가 /login 처리)
+            .httpBasic(AbstractHttpConfigurer::disable)
             .sessionManagement(session -> session
                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers(
                     "/api/auth/refresh",
                     "/api/auth/logout",
-                    "/login", // 개발용 로그인 페이지 허용
+                    "/login",    // DevLoginController 접근 허용
                     "/oauth2/**",
                     "/favicon.ico",
                     "/error",
@@ -64,7 +64,7 @@ public class SecurityConfig {
                 ).permitAll()
                 .anyRequest().authenticated())
             .exceptionHandling(exception -> exception
-                .authenticationEntryPoint(customAuthenticationEntryPoint))
+                .authenticationEntryPoint(customAuthenticationEntryPoint)) // 인증 실패 시 401 JSON 응답
             .oauth2Login(oauth2 -> oauth2
                 .userInfoEndpoint(userInfo -> userInfo.userService(customOAuth2UserService))
                 .successHandler(oAuth2LoginSuccessHandler)

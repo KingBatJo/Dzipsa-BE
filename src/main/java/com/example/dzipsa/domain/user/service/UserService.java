@@ -1,5 +1,6 @@
 package com.example.dzipsa.domain.user.service;
 
+import com.example.dzipsa.domain.room.repository.RoomMemberRepository;
 import com.example.dzipsa.domain.user.converter.UserConverter;
 import com.example.dzipsa.domain.user.dto.response.UserResponse;
 import com.example.dzipsa.domain.user.entity.User;
@@ -21,6 +22,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final UserConverter userConverter;
+    private final RoomMemberRepository roomMemberRepository;
 
     public UserResponse findById(Long userId) {
         log.debug("[UserService] findById userId={}", userId);
@@ -29,7 +31,10 @@ public class UserService {
                     log.warn("[UserService] findById 실패 - 사용자 없음 userId={}", userId);
                     return new BusinessException(UserErrorCode.USER_NOT_FOUND);
                 });
-        return userConverter.toResponse(user);
+        
+        boolean hasRoom = roomMemberRepository.findByUserIdAndLeftAtIsNull(userId).isPresent();
+        
+        return userConverter.toResponse(user, hasRoom);
     }
 
     public UserResponse findByEmail(String email) {
@@ -39,6 +44,9 @@ public class UserService {
                     log.warn("[UserService] findByEmail 실패 - 사용자 없음 email={}", email);
                     return new BusinessException(UserErrorCode.USER_NOT_FOUND);
                 });
-        return userConverter.toResponse(user);
+        
+        boolean hasRoom = roomMemberRepository.findByUserIdAndLeftAtIsNull(user.getId()).isPresent();
+        
+        return userConverter.toResponse(user, hasRoom);
     }
 }
