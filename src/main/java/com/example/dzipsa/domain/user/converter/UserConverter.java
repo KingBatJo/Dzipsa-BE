@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class UserConverter {
 
-    public UserResponse toResponse(User user) {
+    public UserResponse toResponse(User user, boolean hasRoom) {
         return UserResponse.builder()
                 .id(user.getId())
                 .email(user.getEmail())
@@ -17,6 +17,7 @@ public class UserConverter {
                 .profileImageUrl(user.getProfileImageUrl())
                 .terms_agreed(user.isTerms_agreed())
                 .role(user.getRole())
+                .hasRoom(hasRoom)
                 .build();
     }
 }

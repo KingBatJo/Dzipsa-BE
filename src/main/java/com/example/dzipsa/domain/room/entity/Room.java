@@ -40,6 +40,9 @@ public class Room {
     @Column(nullable = false)
     private Long membersCount;
 
+    @Column(nullable = false)
+    private Long score; // 방 점수
+
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -55,6 +58,7 @@ public class Room {
         this.motto = motto;
         this.ownerId = ownerId;
         this.membersCount = 1L;
+        this.score = 3L; // 생성 시 기본 점수 3점
     }
 
     public void updateName(String name) {
@@ -83,6 +87,11 @@ public class Room {
 
     public void changeOwner(Long newOwnerId) {
         this.ownerId = newOwnerId;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void addScore(Long points) {
+        this.score += points;
         this.updatedAt = LocalDateTime.now();
     }
 }

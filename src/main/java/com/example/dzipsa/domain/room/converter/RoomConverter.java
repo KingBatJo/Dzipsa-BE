@@ -7,6 +7,8 @@ import com.example.dzipsa.domain.room.entity.Room;
 import com.example.dzipsa.domain.user.entity.User;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 @Component
 public class RoomConverter {
 
@@ -19,13 +21,19 @@ public class RoomConverter {
     }
 
     public RoomResponse toRoomResponse(Room room, String invitationCode) {
+        return toRoomResponse(room, invitationCode, null);
+    }
+
+    public RoomResponse toRoomResponse(Room room, String invitationCode, List<RoomMemberResponse> members) {
         return RoomResponse.builder()
                 .id(room.getId())
                 .name(room.getName())
                 .motto(room.getMotto())
                 .ownerId(room.getOwnerId())
                 .membersCount(room.getMembersCount())
+                .score(room.getScore())
                 .invitationCode(invitationCode)
+                .members(members)
                 .createdAt(room.getCreatedAt())
                 .updatedAt(room.getUpdatedAt())
                 .build();

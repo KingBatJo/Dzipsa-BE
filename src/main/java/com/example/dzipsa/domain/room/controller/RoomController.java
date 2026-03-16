@@ -3,8 +3,11 @@ package com.example.dzipsa.domain.room.controller;
 import com.example.dzipsa.domain.room.dto.request.RoomCreateRequest;
 import com.example.dzipsa.domain.room.dto.request.RoomJoinRequest;
 import com.example.dzipsa.domain.room.dto.request.RoomUpdateRequest;
+import com.example.dzipsa.domain.room.dto.response.RoomInvitationCodeResponse;
 import com.example.dzipsa.domain.room.dto.response.RoomMemberResponse;
+import com.example.dzipsa.domain.room.dto.response.RoomMottoResponse;
 import com.example.dzipsa.domain.room.dto.response.RoomResponse;
+import com.example.dzipsa.domain.room.dto.response.UsedProfileImageResponse;
 import com.example.dzipsa.domain.room.service.RoomService;
 import com.example.dzipsa.domain.user.entity.User;
 import io.swagger.v3.oas.annotations.Operation;
@@ -45,12 +48,11 @@ public class RoomController {
         return ResponseEntity.ok(response);
     }
 
-    @DeleteMapping("/{roomId}/leave")
-    @Operation(summary = "방 나가기", description = "방장이 나갈 경우 가장 오래된 멤버에게 방장이 위임됩니다.")
-    public ResponseEntity<Void> leaveRoom(
-            @PathVariable Long roomId,
+    @DeleteMapping("/leave")
+    @Operation(summary = "내 방 나가기", description = "현재 참여 중인 방에서 나갑니다. 방장이 나갈 경우 가장 오래된 멤버에게 방장이 위임됩니다.")
+    public ResponseEntity<Void> leaveMyRoom(
             @AuthenticationPrincipal User user) {
-        roomService.leaveRoom(roomId, user);
+        roomService.leaveMyRoom(user);
         return ResponseEntity.noContent().build();
     }
 
@@ -86,5 +88,48 @@ public class RoomController {
             @AuthenticationPrincipal User user) {
         List<RoomMemberResponse> members = roomService.getRoomMembers(user, excludeMe);
         return ResponseEntity.ok(members);
+    }
+
+    @GetMapping("/invitation-code")
+    @Operation(summary = "초대 코드 조회", description = "현재 참여 중인 방의 활성화된 초대 코드를 조회합니다. 만료되었을 경우 에러가 발생합니다.")
+    public ResponseEntity<RoomInvitationCodeResponse> getInvitationCode(
+            @AuthenticationPrincipal User user) {
+        RoomInvitationCodeResponse response = roomService.getInvitationCode(user);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/invitation-code/reissue")
+    @Operation(summary = "초대 코드 재발급", description = "현재 참여 중인 방의 초대 코드가 만료되었을 경우 새로 발급합니다.")
+    public ResponseEntity<RoomInvitationCodeResponse> reissueInvitationCode(
+            @AuthenticationPrincipal User user) {
+        RoomInvitationCodeResponse response = roomService.reissueInvitationCode(user);
+        return ResponseEntity.ok(response);
+    }
+
+    @DeleteMapping("/members/{memberUserId}")
+    @Operation(summary = "구성원 내보내기", description = "방장이 특정 구성원을 방에서 내보냅니다.")
+    public ResponseEntity<Void> kickMember(
+            @PathVariable Long memberUserId,
+            @AuthenticationPrincipal User user) {
+        roomService.kickMember(memberUserId, user);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/motto")
+    @Operation(summary = "가훈 조회", description = "현재 참여 중인 방의 가훈/목표를 조회합니다.")
+    public ResponseEntity<RoomMottoResponse> getMotto(
+            @AuthenticationPrincipal User user) {
+        RoomMottoResponse response = roomService.getMotto(user);
+        return ResponseEntity.ok(response);
+    }
+
+    @GetMapping("/used-profile-images")
+    @Operation(summary = "방에서 사용 중인 프로필 이미지 목록 조회", description = "방 구성원들이 이미 사용 중인 프로필 번호(1~6) 목록을 조회합니다. 방 입장 전이라면 초대 코드를 필수로 입력해야 합니다.")
+    public ResponseEntity<UsedProfileImageResponse> getUsedProfileImages(
+            @Parameter(description = "초대 코드 (방 입장 전인 경우 필수, 이미 방에 있다면 생략 가능)")
+            @RequestParam(required = false) String invitationCode,
+            @AuthenticationPrincipal User user) {
+        UsedProfileImageResponse response = roomService.getUsedProfileImages(user, invitationCode);
+        return ResponseEntity.ok(response);
     }
 }
