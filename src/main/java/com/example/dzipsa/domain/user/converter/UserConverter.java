@@ -1,5 +1,6 @@
 package com.example.dzipsa.domain.user.converter;
 
+import com.example.dzipsa.domain.user.dto.response.ProfileImageResponse;
 import com.example.dzipsa.domain.user.dto.response.UserResponse;
 import com.example.dzipsa.domain.user.entity.User;
 
@@ -15,9 +16,15 @@ public class UserConverter {
                 .nickname(user.getNickname())
                 .providerType(user.getProviderType())
                 .profileImageUrl(user.getProfileImageUrl())
-                .terms_agreed(user.isTerms_agreed())
+                .termsAgreed(user.isTermsAgreed())
                 .role(user.getRole())
                 .hasRoom(hasRoom)
+                .build();
+    }
+
+    public ProfileImageResponse toProfileImageResponse(User user) {
+        return ProfileImageResponse.builder()
+                .profileImageUrl(user.getProfileImageUrl())
                 .build();
     }
 }
