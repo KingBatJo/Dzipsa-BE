@@ -45,7 +45,10 @@ public class RoomServiceImpl implements RoomService {
         log.info("[RoomService] 방 생성 요청. userId={}", user.getId());
         validateUserNotInAnyRoom(user.getId());
 
-        Room newRoom = roomConverter.toRoom(request, user);
+        // request가 null이면 빈 객체 생성 (기본값 설정 목적)
+        RoomCreateRequest finalRequest = (request != null) ? request : new RoomCreateRequest();
+
+        Room newRoom = roomConverter.toRoom(finalRequest, user);
         roomRepository.save(newRoom);
 
         // 방장도 멤버로 추가
