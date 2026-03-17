@@ -1,6 +1,7 @@
 package com.example.dzipsa.domain.room.entity;
 
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -23,12 +24,15 @@ public class RoomMember {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @NotNull
     @Column(nullable = false)
     private Long roomId;
 
+    @NotNull
     @Column(nullable = false)
     private Long userId;
 
+    @NotNull
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private LocalDateTime joinedAt;
