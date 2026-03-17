@@ -33,7 +33,7 @@ public class RoomController {
     @PostMapping
     @Operation(summary = "방 생성", description = "방 생성 후 24시간 유효한 6자리 초대 코드가 반환됩니다.")
     public ResponseEntity<RoomResponse> createRoom(
-            @Valid @RequestBody(required = false) RoomCreateRequest request,
+            @RequestBody(required = false) RoomCreateRequest request,
             @AuthenticationPrincipal User user) {
         RoomResponse response = roomService.create(request, user);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
