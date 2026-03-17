@@ -4,16 +4,10 @@ import com.example.dzipsa.domain.auth.entity.enums.ProviderType;
 import com.example.dzipsa.domain.user.entity.enums.UserRole;
 import com.example.dzipsa.domain.user.entity.enums.UserStatus;
 
-import jakarta.persistence.Column;
-import jakarta.persistence.Entity;
-import jakarta.persistence.EntityListeners;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
-import jakarta.persistence.GeneratedValue;
-import jakarta.persistence.GenerationType;
-import jakarta.persistence.Id;
-import jakarta.persistence.Table;
-
+import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -36,17 +30,22 @@ public class User {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    // unique = true 제거됨
+    @NotBlank
+    @Size(max = 100)
     @Column(nullable = false, length = 100)
     private String email;
 
-    @Column(nullable = false, length = 50)
+    @NotBlank
+    @Size(min = 2, max = 20)
+    @Column(nullable = false, length = 20)
     private String nickname;
 
+    @NotNull
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserStatus status;
 
+    @NotNull
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private UserRole role;
@@ -60,6 +59,7 @@ public class User {
     private ProviderType providerType;
 
 
+    @NotNull
     @CreatedDate
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
