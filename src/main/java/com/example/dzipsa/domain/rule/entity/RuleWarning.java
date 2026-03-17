@@ -1,4 +1,4 @@
-package com.example.dzipsa.domain.room.entity;
+package com.example.dzipsa.domain.rule.entity;
 
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
@@ -12,13 +12,11 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "room_members", indexes = {
-    @Index(name = "idx_room_user_joined", columnList = "roomId, userId, joinedAt", unique = true)
-})
+@Table(name = "rule_warnings")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EntityListeners(AuditingEntityListener.class)
-public class RoomMember {
+public class RuleWarning {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -30,22 +28,16 @@ public class RoomMember {
 
     @NotNull
     @Column(nullable = false)
-    private Long userId;
+    private Long ruleId;
 
     @NotNull
     @CreatedDate
     @Column(nullable = false, updatable = false)
-    private LocalDateTime joinedAt;
-
-    private LocalDateTime leftAt;
+    private LocalDateTime createdAt;
 
     @Builder
-    public RoomMember(Long roomId, Long userId) {
+    public RuleWarning(Long roomId, Long ruleId) {
         this.roomId = roomId;
-        this.userId = userId;
-    }
-
-    public void leave() {
-        this.leftAt = LocalDateTime.now();
+        this.ruleId = ruleId;
     }
 }
