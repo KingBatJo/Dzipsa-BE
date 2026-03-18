@@ -58,4 +58,23 @@ public class RedisUtil {
     public Set<String> keys(String pattern) {
         return redisTemplate.keys(pattern);
     }
+
+    /**
+     * 특정 Key의 남은 유효 시간을 반환합니다.
+     * @param key Redis Key
+     * @param timeUnit 반환받을 시간 단위 (예: TimeUnit.SECONDS, TimeUnit.MILLISECONDS)
+     * @return 남은 시간 (Key가 존재하지 않으면 -2, 만료 시간이 설정되지 않았으면 -1 반환)
+     */
+    public Long getExpire(String key, TimeUnit timeUnit) {
+        return redisTemplate.getExpire(key, timeUnit);
+    }
+
+    /**
+     * 특정 Key의 남은 유효 시간을 초(Seconds) 단위로 반환합니다.
+     * @param key Redis Key
+     * @return 남은 시간(초)
+     */
+    public Long getExpire(String key) {
+        return redisTemplate.getExpire(key, TimeUnit.SECONDS);
+    }
 }
