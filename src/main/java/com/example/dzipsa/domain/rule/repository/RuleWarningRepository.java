@@ -15,4 +15,6 @@ public interface RuleWarningRepository extends JpaRepository<RuleWarning, Long> 
     List<RuleWarning> findByRoomIdAndCreatedAtAfterOrderByCreatedAtDesc(Long roomId, LocalDateTime createdAt, Pageable pageable);
 
     Optional<RuleWarning> findFirstByRuleIdOrderByCreatedAtDesc(Long ruleId);
+
+    int countByRoomIdAndCreatedAtAfter(Long roomId, LocalDateTime createdAt);
 }

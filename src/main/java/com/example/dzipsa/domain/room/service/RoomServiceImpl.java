@@ -13,6 +13,7 @@ import com.example.dzipsa.domain.room.entity.RoomMember;
 import com.example.dzipsa.domain.room.repository.RoomInvitationRepository;
 import com.example.dzipsa.domain.room.repository.RoomMemberRepository;
 import com.example.dzipsa.domain.room.repository.RoomRepository;
+import com.example.dzipsa.domain.rule.repository.RuleWarningRepository;
 import com.example.dzipsa.domain.user.entity.User;
 import com.example.dzipsa.domain.user.repository.UserRepository;
 import com.example.dzipsa.global.exception.BusinessException;
@@ -22,6 +23,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
@@ -37,6 +39,7 @@ public class RoomServiceImpl implements RoomService {
     private final RoomInvitationRepository roomInvitationRepository;
     private final RoomMemberRepository roomMemberRepository;
     private final UserRepository userRepository;
+    private final RuleWarningRepository ruleWarningRepository;
     private final RoomConverter roomConverter;
 
     @Override
@@ -189,8 +192,14 @@ public class RoomServiceImpl implements RoomService {
 
         // 방 구성원 목록 조회 (나 포함)
         List<RoomMemberResponse> members = getRoomMembers(user, false);
+        
+        // 최근 24시간 동안 발생한 룰 경고 개수 조회
+        LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(24);
+        int ruleWarningCount = ruleWarningRepository.countByRoomIdAndCreatedAtAfter(myRoom.getId(), twentyFourHoursAgo);
 
-        return roomConverter.toRoomResponse(myRoom, invitationCode, members);
+        // TODO: 할 일 도메인 구현시 추가
+        int delayTaskCount = 0;
+        return roomConverter.toRoomResponse(myRoom, invitationCode, members, ruleWarningCount, delayTaskCount);
     }
 
     @Override
@@ -231,7 +240,9 @@ public class RoomServiceImpl implements RoomService {
                     return new BusinessException(RoomErrorCode.INVALID_INVITATION_CODE);
                 });
 
-        return new RoomInvitationCodeResponse(code);
+        LocalDateTime availableAt = roomInvitationRepository.getReissueAvailableAt(myMember.getRoomId());
+
+        return new RoomInvitationCodeResponse(code, availableAt);
     }
 
     @Override
@@ -244,7 +255,9 @@ public class RoomServiceImpl implements RoomService {
         String code = roomInvitationRepository.reissueInvitationCode(myMember.getRoomId());
         log.info("[RoomService] 초대 코드 재발급 완료. roomId={}, newCode={}", myMember.getRoomId(), code);
         
-        return new RoomInvitationCodeResponse(code);
+        LocalDateTime availableAt = roomInvitationRepository.getReissueAvailableAt(myMember.getRoomId());
+
+        return new RoomInvitationCodeResponse(code, availableAt);
     }
 
     @Override
