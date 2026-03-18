@@ -1,0 +1,18 @@
+package com.example.dzipsa.domain.todo.dto.response;
+
+import com.example.dzipsa.domain.todo.entity.enums.TodoStatus;
+import lombok.Builder;
+import lombok.Getter;
+import java.time.LocalDate;
+
+@Getter
+@Builder
+public class TodoSummaryResponse {
+  private Long instanceId;
+  private String title;
+  private String assigneeNickname;
+  private Integer profileImageNumber;
+  private TodoStatus status;
+  private LocalDate targetDate;
+  private Long delayDays;
+}
