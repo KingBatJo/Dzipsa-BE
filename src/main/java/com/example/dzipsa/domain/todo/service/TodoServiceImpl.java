@@ -16,6 +16,9 @@ import com.example.dzipsa.domain.todo.repository.TodoInstanceRepository;
 import com.example.dzipsa.domain.todo.repository.TodoRepository;
 import com.example.dzipsa.domain.user.entity.User;
 import com.example.dzipsa.domain.user.repository.UserRepository;
+import com.example.dzipsa.global.util.S3Uploader;
+import jakarta.persistence.EntityNotFoundException;
+import java.io.IOException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
@@ -26,6 +29,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.web.multipart.MultipartFile;
 
 @Slf4j
 @Service
@@ -37,6 +41,7 @@ public class TodoServiceImpl implements TodoService {
   private final TodoInstanceRepository todoInstanceRepository;
   private final UserRepository userRepository;
   private final RoomRepository roomRepository;
+  private final S3Uploader s3Uploader;
 
   /**
    * [할 일 신규 등록]
@@ -66,13 +71,13 @@ public class TodoServiceImpl implements TodoService {
         .build();
     todoRepository.save(todo);
 
-    // 2. 첫 실행 인스턴스 즉시 생성 (사용자 경험 최적화)
+    // 2. 첫 실행 인스턴스 즉시 생성
     saveInstance(todo, room, defaultAssignee, request.getStartDate());
   }
 
   /**
    * [나의 할 일 전체 조회]
-   * '지연/오늘/예정' 세 영역에 대해 각각 독립적인 커서 페이징을 적용하여 결과 반환
+   * 지연/오늘/예정 세 영역을 한 번에 조회하여 메인 홈 화면에 전달
    */
   @Override
   public MyTodoListResponse getMyTodoList(Long userId, String missedCursor, String todayCursor, String upcomingCursor) {
@@ -93,6 +98,34 @@ public class TodoServiceImpl implements TodoService {
         .todayTodos(TodoConverter.toPagedResponse(todaySlice))
         .upcomingTodos(TodoConverter.toPagedResponse(upcomingSlice))
         .build();
+  }
+
+  /**
+   * [나의 할 일 - 섹션별 개별 페이징 조회]
+   * 무한 스크롤 시 호출되는 인터페이스 구현 메서드들
+   */
+  @Override
+  public MyTodoListResponse.PagedTodoResponse getMissedTodos(Long userId, String cursor) {
+    LocalDate today = LocalDate.now();
+    PageRequest pageRequest = PageRequest.of(0, 10);
+    Slice<TodoInstance> slice = fetchMissedTodos(userId, today, cursor, pageRequest);
+    return TodoConverter.toPagedResponse(slice);
+  }
+
+  @Override
+  public MyTodoListResponse.PagedTodoResponse getTodayTodos(Long userId, String cursor) {
+    LocalDate today = LocalDate.now();
+    PageRequest pageRequest = PageRequest.of(0, 10);
+    Slice<TodoInstance> slice = fetchTodayTodos(userId, today, cursor, pageRequest);
+    return TodoConverter.toPagedResponse(slice);
+  }
+
+  @Override
+  public MyTodoListResponse.PagedTodoResponse getUpcomingTodos(Long userId, String cursor) {
+    LocalDate today = LocalDate.now();
+    PageRequest pageRequest = PageRequest.of(0, 10);
+    Slice<TodoInstance> slice = fetchUpcomingTodos(userId, today, cursor, pageRequest);
+    return TodoConverter.toPagedResponse(slice);
   }
 
   /**
@@ -119,17 +152,34 @@ public class TodoServiceImpl implements TodoService {
   }
 
   /**
-   * [할 일 완료 처리]
-   * 수행한 할 일의 상태를 완료로 변경하고 인증샷 URL을 저장
+   * [할 일 완료 처리 - S3 연동]
    */
   @Override
   @Transactional
-  public void completeTodo(Long userId, Long instanceId, String imageUrl) {
+  public void completeTodo(Long userId, Long instanceId, MultipartFile image) {
     TodoInstance instance = todoInstanceRepository.findById(instanceId)
-        .orElseThrow(() -> new RuntimeException("수행할 데이터(ID: " + instanceId + ")를 찾을 수 없습니다."));
+        .orElseThrow(() -> new EntityNotFoundException("해당 할 일을 찾을 수 없습니다. ID: " + instanceId));
 
-    // TODO: S3 연동 시 imageUrl은 S3에서 반환받은 URL이 들어올 예정
-    instance.complete(imageUrl);
+    // 1. 권한 체크 (임시)
+    if (!instance.getActualAssignee().getId().equals(userId)) {
+      log.warn("[Security] 할 일 담당자 불일치 - instanceId: {}, userId: {}", instanceId, userId);
+    }
+
+    String imageUrl = null; // 기본값은 null
+
+    try {
+      // 2. 이미지가 존재할 때만 S3 업로드 진행
+      if (image != null && !image.isEmpty()) {
+        imageUrl = s3Uploader.upload(image, "todo-proof");
+      }
+
+      // 3. DB 상태 변경
+      instance.complete(imageUrl);
+
+    } catch (IOException e) {
+      log.error("할 일 완료 처리 중 S3 업로드 실패 - instanceId: {}", instanceId, e);
+      throw new RuntimeException("이미지 업로드 중 오류가 발생했습니다.");
+    }
   }
 
   /**
@@ -141,17 +191,15 @@ public class TodoServiceImpl implements TodoService {
   @Transactional
   public void updateTodo(Long userId, Long todoId, TodoUpdateRequest request) {
     Todo todo = todoRepository.findById(todoId)
-        .orElseThrow(() -> new RuntimeException("수정할 원본 데이터(ID: " + todoId + ")가 없습니다."));
+        .orElseThrow(() -> new RuntimeException("수정할 원본 데이터가 없습니다."));
 
     User newAssignee = (request.getAssigneeId() != null)
         ? userRepository.findById(request.getAssigneeId()).orElse(todo.getDefaultAssignee())
         : todo.getDefaultAssignee();
 
-    // 마스터 정보 업데이트
     todo.update(request.getTitle(), request.getMemo(), newAssignee,
         request.getRecurringType(), request.getRepeatDays(), request.getEndDate());
 
-    // 오늘 이후의 인스턴스들에 변경된 정보 전파
     List<TodoInstance> futureInstances = todoInstanceRepository.findAllByTodoIdAndTargetDateAfter(todoId, LocalDate.now());
     futureInstances.forEach(instance -> instance.updateActualAssignee(newAssignee));
   }
@@ -165,18 +213,16 @@ public class TodoServiceImpl implements TodoService {
   @Transactional
   public void generateRecurringTodos() {
     LocalDate today = LocalDate.now();
-    int dayOfWeek = today.getDayOfWeek().getValue(); // 월(1)~일(7)
+    int dayOfWeek = today.getDayOfWeek().getValue();
 
     List<Todo> activeTodos = todoRepository.findAllByIsActiveTrue();
 
     for (Todo todo : activeTodos) {
-      // 유효 기간 검증
       if (today.isBefore(todo.getStartDate()) || (todo.getEndDate() != null && today.isAfter(todo.getEndDate()))) {
         continue;
       }
 
       if (isRecurringDay(todo, today, dayOfWeek)) {
-        // 중복 생성 방지 확인 후 생성
         if (!todoInstanceRepository.existsByTodoIdAndTargetDate(todo.getId(), today)) {
           saveInstance(todo, todo.getRoom(), todo.getDefaultAssignee(), today);
         }
@@ -184,7 +230,7 @@ public class TodoServiceImpl implements TodoService {
     }
   }
 
-  // 헬퍼 메서드
+  // --- 헬퍼 메서드 ---
 
   private void saveInstance(Todo todo, Room room, User assignee, LocalDate date) {
     TodoInstance instance = TodoInstance.builder()
