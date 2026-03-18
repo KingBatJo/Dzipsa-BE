@@ -14,6 +14,9 @@ public interface TodoService {
 
   // 3중 커서를 지원하도록 파라미터 수정
   MyTodoListResponse getMyTodoList(Long userId, String missedCursor, String todayCursor, String upcomingCursor);
+  MyTodoListResponse.PagedTodoResponse getMissedTodos(Long userId, String cursor);
+  MyTodoListResponse.PagedTodoResponse getTodayTodos(Long userId, String cursor);
+  MyTodoListResponse.PagedTodoResponse getUpcomingTodos(Long userId, String cursor);
 
   List<TodoSummaryResponse> getRoomTodoList(Long roomId);
 
