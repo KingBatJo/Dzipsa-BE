@@ -8,6 +8,7 @@ import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import org.springframework.data.domain.Slice;
 
 import java.util.List;
+import org.springframework.web.multipart.MultipartFile;
 
 public interface TodoService {
   void createTodo(Long userId, Long roomId, TodoCreateRequest request);
@@ -22,7 +23,7 @@ public interface TodoService {
 
   Slice<TodoCompletedResponse> getCompletedTodos(Long roomId, int page, int size);
 
-  void completeTodo(Long userId, Long instanceId, String imageUrl);
+  void completeTodo(Long userId, Long instanceId, MultipartFile image); // String imageUrl에서 변경
 
   void updateTodo(Long userId, Long todoId, TodoUpdateRequest request);
 
