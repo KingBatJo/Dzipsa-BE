@@ -21,10 +21,14 @@ public class RoomConverter {
     }
 
     public RoomResponse toRoomResponse(Room room, String invitationCode) {
-        return toRoomResponse(room, invitationCode, null);
+        return toRoomResponse(room, invitationCode, null, 0,0);
     }
 
     public RoomResponse toRoomResponse(Room room, String invitationCode, List<RoomMemberResponse> members) {
+        return toRoomResponse(room, invitationCode, members, 0,0);
+    }
+
+    public RoomResponse toRoomResponse(Room room, String invitationCode, List<RoomMemberResponse> members, Integer ruleWarningCount, Integer delayTaskCount) {
         return RoomResponse.builder()
                 .id(room.getId())
                 .name(room.getName())
@@ -34,6 +38,8 @@ public class RoomConverter {
                 .score(room.getScore())
                 .invitationCode(invitationCode)
                 .members(members)
+                .ruleWarningCount(ruleWarningCount != null ? ruleWarningCount : 0)
+                .delayTaskCount(delayTaskCount != null? delayTaskCount : 0)
                 .createdAt(room.getCreatedAt())
                 .updatedAt(room.getUpdatedAt())
                 .build();
