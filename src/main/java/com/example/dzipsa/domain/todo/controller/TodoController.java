@@ -10,6 +10,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Slice;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.http.MediaType;
+import java.io.IOException;
 
 import java.util.List;
 
@@ -124,11 +127,20 @@ public class TodoController {
    * URL: PATCH /api/todos/instances/{instanceId}/complete
    * S3 이미지 업로드 후 반환된 URL을 저장
    */
-  @PatchMapping("/instances/{instanceId}/complete")
+  @PatchMapping(
+      value = "/instances/{instanceId}/complete",
+      consumes = {MediaType.MULTIPART_FORM_DATA_VALUE} // 멀티파트만 받겠다고 명시
+  )
   public ResponseEntity<Void> completeTodo(
-      @PathVariable Long instanceId,
-      @RequestBody String imageUrl) {
-    todoService.completeTodo(1L, instanceId, imageUrl);
+      @PathVariable(value = "instanceId") Long instanceId,
+      @RequestPart(value = "image") MultipartFile image) throws IOException {
+
+    // 서비스 호출 전 로그 확인용
+    System.out.println("====== 컨트롤러 진입 성공 ======");
+    System.out.println("instanceId: " + instanceId);
+    System.out.println("파일명: " + image.getOriginalFilename());
+
+    todoService.completeTodo(1L, instanceId, image);
     return ResponseEntity.ok().build();
   }
 
