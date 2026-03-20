@@ -7,6 +7,7 @@ import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.todo.service.TodoService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Slice;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +17,7 @@ import java.io.IOException;
 
 import java.util.List;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/todos")
 @RequiredArgsConstructor
@@ -99,12 +101,26 @@ public class TodoController {
   /**
    * [우리집 할 일 - 지연된 할 일 전체 현황 조회]
    * URL: GET /api/todos/room/delayed
-   * 방 멤버 전체의 지연된 할 일 목록을 조회
    */
   @GetMapping("/room/delayed")
   public ResponseEntity<List<TodoSummaryResponse>> getRoomDelayedTodo(
       @RequestParam Long roomId) {
-    // TODO: 서비스 레이어에 지연 조회 로직 추가 필요
+    // 기존 build()에서 서비스 호출로 변경
+    List<TodoSummaryResponse> response = todoService.getRoomDelayedTodo(roomId);
+    return ResponseEntity.ok(response);
+  }
+
+  /**
+   * [할 일 인증샷 삭제]
+   * URL: DELETE /api/todos/instances/{instanceId}/image
+   * 사용자가 '-' 버튼을 눌렀을 때 호출되어 S3 파일과 DB URL을 삭제함
+   */
+  @DeleteMapping("/instances/{instanceId}/image")
+  public ResponseEntity<Void> deleteTodoImage(
+      @PathVariable Long instanceId) {
+    // 현재 로그인한 유저 ID (예시 1L)
+    Long userId = 1L;
+    todoService.deleteTodoImage(userId, instanceId);
     return ResponseEntity.ok().build();
   }
 
@@ -127,20 +143,14 @@ public class TodoController {
    * URL: PATCH /api/todos/instances/{instanceId}/complete
    * S3 이미지 업로드 후 반환된 URL을 저장
    */
-  @PatchMapping(
-      value = "/instances/{instanceId}/complete",
-      consumes = {MediaType.MULTIPART_FORM_DATA_VALUE} // 멀티파트만 받겠다고 명시
-  )
+  @PatchMapping(value = "/instances/{instanceId}/complete", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<Void> completeTodo(
-      @PathVariable(value = "instanceId") Long instanceId,
-      @RequestPart(value = "image") MultipartFile image) throws IOException {
-
-    // 서비스 호출 전 로그 확인용
-    System.out.println("====== 컨트롤러 진입 성공 ======");
-    System.out.println("instanceId: " + instanceId);
-    System.out.println("파일명: " + image.getOriginalFilename());
-
-    todoService.completeTodo(1L, instanceId, image);
+      @PathVariable Long instanceId,
+      @RequestPart(value = "image", required = false) MultipartFile image // 선택 사항으로 변경
+  ) {
+    // 현재 로그인한 유저 ID를 가져오는 로직 (예시로 1L 사용)
+    Long userId = 1L;
+    todoService.completeTodo(userId, instanceId, image);
     return ResponseEntity.ok().build();
   }
 
@@ -156,4 +166,18 @@ public class TodoController {
     todoService.updateTodo(1L, todoId, request);
     return ResponseEntity.ok().build();
   }
+
+  /**
+   * [배치 수동 실행 테스트용]
+   * URL: POST /api/todos/test/batch
+   * 주의: 테스트 완료 후 삭제하거나 주석처리
+
+  @PostMapping("/test/batch")
+  public ResponseEntity<String> testBatch() {
+    log.info("===== 수동 배치 실행 시작 =====");
+    todoService.generateRecurringTodos();
+    log.info("===== 수동 배치 실행 완료 =====");
+    return ResponseEntity.ok("Batch executed successfully");
+  }
+  */
 }
