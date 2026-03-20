@@ -39,20 +39,26 @@ public class TodoInstance {
 
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "actual_assignee_id")
-  private User actualAssignee; // 실제 수행 담당자
+  private User actualAssignee;
+
+  @Column(nullable = false, length = 30)
+  private String title;
+
+  @Column(columnDefinition = "TEXT")
+  private String memo;
 
   @Column(nullable = false)
-  private LocalDate targetDate; // 할 일 수행 예정일
+  private LocalDate targetDate;
 
   @Enumerated(EnumType.STRING)
   @Builder.Default
   @Column(nullable = false)
   private TodoStatus status = TodoStatus.PENDING;
 
-  private LocalDateTime completedAt; // 완료 시각
+  private LocalDateTime completedAt;
 
   @Column(length = 300)
-  private String imageUrl; // S3에 업로드된 인증샷 URL 저장
+  private String imageUrl;
 
   @CreatedDate
   @Column(updatable = false, nullable = false)
@@ -62,17 +68,23 @@ public class TodoInstance {
   @Column(nullable = false)
   private LocalDateTime updatedAt;
 
-  // 할 일 완료 처리 (인증샷 포함)
+  // 비즈니스 로직: 할 일 완료 처리
   public void complete(String imageUrl) {
     this.status = TodoStatus.COMPLETED;
     this.completedAt = LocalDateTime.now();
     this.imageUrl = imageUrl;
   }
 
-  // 마스터 정보 수정 시, 아직 시작 안 한(PENDING) 미래의 데이터 담당자를 변경
-  public void updateActualAssignee(User newAssignee) {
+  // 마스터 정보 변경 시 미래 인스턴스 일괄 업데이트 메서드
+  public void updateFromMaster(String title, String memo, User newAssignee) {
     if (this.status == TodoStatus.PENDING) {
+      this.title = title;
+      this.memo = memo;
       this.actualAssignee = newAssignee;
     }
+  }
+
+  public void removeImage() {
+    this.imageUrl = null;
   }
 }
