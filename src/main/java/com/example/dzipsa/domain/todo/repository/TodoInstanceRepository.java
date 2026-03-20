@@ -58,9 +58,67 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       @Param("cursorId") Long cursorId,
       Pageable pageable);
 
+  /**
+   * [우리집 오늘 할 일]
+   * 상태 순(PENDING 우선) -> 생성일 순 정렬
+   */
+  @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId AND ti.targetDate = :today " +
+      "ORDER BY CASE WHEN ti.status = 'PENDING' THEN 0 ELSE 1 END ASC, ti.createdAt ASC")
+  List<TodoInstance> findRoomTodayTodos(
+      @Param("roomId") Long roomId,
+      @Param("today") LocalDate today);
+
+  /**
+   * [우리집 지연된 할 일]
+   * 오늘 이전 날짜 + 미완료 + 오래된 날짜순(D+5, D+3...)
+   */
+  @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId " +
+      "AND ti.targetDate < :today AND ti.status = :status " +
+      "ORDER BY ti.targetDate ASC")
+  List<TodoInstance> findRoomDelayedTodos(
+      @Param("roomId") Long roomId,
+      @Param("today") LocalDate today,
+      @Param("status") TodoStatus status);
+
+  /**
+   * [우리집 모든 할 일]
+   * 오늘 포함 과거의 모든 데이터를 최신 날짜순으로
+   */
+  @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId " +
+      "AND ti.targetDate <= :today " +
+      "ORDER BY ti.targetDate DESC")
+  List<TodoInstance> findRoomAllTodos(
+      @Param("roomId") Long roomId,
+      @Param("today") LocalDate today);
+
+  /**
+   * [특정 구성원의 할 일]
+   * 특정 유저 + 오늘까지의 할 일 + 마감일 빠른 순
+   */
+  @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId " +
+      "AND ti.actualAssignee.id = :userId AND ti.targetDate <= :today " +
+      "ORDER BY ti.targetDate ASC")
+  List<TodoInstance> findMemberTodos(
+      @Param("roomId") Long roomId,
+      @Param("userId") Long userId,
+      @Param("today") LocalDate today);
+
+  /**
+   * [내 놓친 할 일 카운트]
+   * 본인 담당 + 오늘 이전 + 미완료 상태인 건수
+   */
+  @Query("SELECT COUNT(ti) FROM TodoInstance ti WHERE ti.actualAssignee.id = :userId " +
+      "AND ti.targetDate < :today AND ti.status = :status")
+  int countMissedTodos(
+      @Param("userId") Long userId,
+      @Param("today") LocalDate today,
+      @Param("status") TodoStatus status);
+
   // 배치/로직용 유틸리티 메서드
   boolean existsByTodoIdAndTargetDate(Long todoId, LocalDate targetDate);
-  List<TodoInstance> findAllByRoomIdAndTargetDateOrderByCreatedAtAsc(Long roomId, LocalDate today);
-  Slice<TodoInstance> findAllByRoomIdAndStatusOrderByCreatedAtDesc(Long roomId, TodoStatus status, Pageable pageable);
+
+  @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId AND ti.status = :status ORDER BY ti.createdAt DESC")
+  Slice<TodoInstance> findCompletedTodos(@Param("roomId") Long roomId, @Param("status") TodoStatus status, Pageable pageable);
+
   List<TodoInstance> findAllByTodoIdAndTargetDateAfter(Long todoId, LocalDate today);
 }
