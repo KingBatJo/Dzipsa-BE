@@ -1,6 +1,7 @@
 package com.example.dzipsa.domain.todo.dto.request;
 
 import com.example.dzipsa.domain.todo.entity.enums.RecurringType;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -25,8 +26,10 @@ public class TodoCreateRequest {
 
   private String repeatDays; // "0,2,4"
 
+  @JsonFormat(pattern = "yyyy.MM.dd")
   @NotNull(message = "시작 날짜를 선택해주세요.")
   private LocalDate startDate;
 
+  @JsonFormat(pattern = "yyyy.MM.dd")
   private LocalDate endDate;
 }
