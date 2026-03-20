@@ -11,8 +11,9 @@ public class TodoSummaryResponse {
   private Long instanceId;
   private String title;
   private String assigneeNickname;
-  private Integer profileImageNumber;
+  private String profileImageUrl;
   private TodoStatus status;
   private LocalDate targetDate;
   private Long delayDays;
+  private String imageUrl;
 }
