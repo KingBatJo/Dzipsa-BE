@@ -79,13 +79,15 @@ public class Todo {
   private LocalDateTime deletedAt;
 
   // 비즈니스 로직: 할 일 정보 수정 메서드
-  public void update(String title, String memo, User defaultAssignee,
-      RecurringType recurringType, String repeatDays, LocalDate endDate) {
+  public void update(String title, String memo, User defaultAssignee, Boolean isRandom,
+      RecurringType recurringType, String repeatDays, LocalDate startDate, LocalDate endDate) {
     this.title = title;
     this.memo = memo;
     this.defaultAssignee = defaultAssignee;
+    this.isRandom = isRandom;
     this.recurringType = recurringType;
     this.repeatDays = repeatDays;
+    this.startDate = startDate;
     this.endDate = endDate;
   }
   // 비즈니스 로직: 할 일 정보 삭제 메서드
