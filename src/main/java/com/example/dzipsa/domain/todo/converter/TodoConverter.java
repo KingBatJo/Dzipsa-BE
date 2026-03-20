@@ -36,24 +36,15 @@ public class TodoConverter {
   public static TodoSummaryResponse toSummaryResponse(TodoInstance instance) {
     User assignee = instance.getActualAssignee();
 
-    // 프론트 협의: profileImageUrl 숫자 문자열을 Integer로 변환
-    Integer profileNum = 1;
-    if (assignee != null && assignee.getProfileImageUrl() != null) {
-      try {
-        profileNum = Integer.parseInt(assignee.getProfileImageUrl());
-      } catch (NumberFormatException e) {
-        profileNum = 1;
-      }
-    }
-
     return TodoSummaryResponse.builder()
         .instanceId(instance.getId())
         .title(instance.getTodo().getTitle())
         .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
-        .profileImageNumber(profileNum)
+        .profileImageUrl(assignee.getProfileImageUrl())
         .status(instance.getStatus())
         .targetDate(instance.getTargetDate())
         .delayDays(calculateDelay(instance.getTargetDate(), instance.getStatus()))
+        .imageUrl(instance.getImageUrl())
         .build();
   }
 
