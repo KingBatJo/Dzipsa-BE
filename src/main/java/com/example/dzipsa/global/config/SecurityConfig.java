@@ -53,8 +53,7 @@ public class SecurityConfig {
                     "/oauth2/**",
                     "/favicon.ico",
                     "/error",
-                    "/css/**", "/images/**", "/js/**",
-                    "/api/todos/**" // 할 일 s3 테스트 임시 허용
+                    "/css/**", "/images/**", "/js/**"
                 ).permitAll()
                 .requestMatchers(
                     "/h2-console/**"
@@ -75,12 +74,6 @@ public class SecurityConfig {
 
         return http.build();
     }
-
-  @Bean
-  public org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer webSecurityCustomizer() {
-    return (web) -> web.ignoring()
-        .requestMatchers("/api/todos/**"); // 할 일 테스트용
-  }
 
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
