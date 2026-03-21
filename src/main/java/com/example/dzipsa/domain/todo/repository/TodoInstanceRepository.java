@@ -90,6 +90,7 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
   List<TodoInstance> findRoomAllTodos(
       @Param("roomId") Long roomId,
       @Param("today") LocalDate today);
+  List<TodoInstance> findAllByRoomIdAndStatusNot(Long roomId, TodoStatus status);
 
   /**
    * [특정 구성원의 할 일]
