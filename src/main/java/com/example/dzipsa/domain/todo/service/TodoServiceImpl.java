@@ -1,5 +1,7 @@
 package com.example.dzipsa.domain.todo.service;
 
+import static io.lettuce.core.KillArgs.Builder.user;
+
 import com.example.dzipsa.domain.room.entity.Room;
 import com.example.dzipsa.domain.room.entity.RoomMember;
 import com.example.dzipsa.domain.room.repository.RoomMemberRepository;
@@ -9,6 +11,7 @@ import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
+import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.todo.entity.Todo;
 import com.example.dzipsa.domain.todo.entity.TodoInstance;
@@ -18,10 +21,13 @@ import com.example.dzipsa.domain.todo.repository.TodoInstanceRepository;
 import com.example.dzipsa.domain.todo.repository.TodoRepository;
 import com.example.dzipsa.domain.user.entity.User;
 import com.example.dzipsa.domain.user.repository.UserRepository;
+import com.example.dzipsa.global.exception.BusinessException;
+import com.example.dzipsa.global.exception.domain.RoomErrorCode;
 import com.example.dzipsa.global.util.S3Uploader;
 import jakarta.persistence.EntityNotFoundException;
 import java.io.IOException;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.Random;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -57,29 +63,72 @@ public class TodoServiceImpl implements TodoService {
    */
   @Override
   @Transactional
-  public void createTodo(Long userId, Long roomId, TodoCreateRequest request) {
-    User writer = userRepository.findById(userId)
-        .orElseThrow(() -> new RuntimeException("작성자(ID: " + userId + ")를 찾을 수 없습니다."));
-    Room room = roomRepository.findById(roomId)
-        .orElseThrow(() -> new RuntimeException("해당 방(ID: " + roomId + ")이 존재하지 않습니다."));
+  public TodoCreateResponse createTodo(User user, TodoCreateRequest request) {
+    RoomMember myMember = getActiveRoomMember(user.getId());
+    Room myRoom = findRoomById(myMember.getRoomId());
 
-    // 담당자가 미지정된 경우 작성자를 기본 담당자로 설정
+    // 1. 담당자 결정 (요청에 있으면 해당 유저, 없으면 본인)
     User defaultAssignee = (request.getDefaultAssigneeId() != null)
-        ? userRepository.findById(request.getDefaultAssigneeId()).orElse(writer)
-        : writer;
+        ? userRepository.findById(request.getDefaultAssigneeId()).orElse(user)
+        : user;
 
-    // 1. Todo 마스터 생성
+    // 2. Todo 마스터 저장
     Todo todo = Todo.builder()
-        .room(room).writer(writer).defaultAssignee(defaultAssignee)
-        .title(request.getTitle()).memo(request.getMemo())
-        .isRandom(request.getIsRandom()).startDate(request.getStartDate())
-        .endDate(request.getEndDate()).recurringType(request.getRecurringType())
-        .repeatDays(request.getRepeatDays()).isActive(true)
+        .room(myRoom)
+        .writer(user)
+        .defaultAssignee(defaultAssignee)
+        .title(request.getTitle())
+        .memo(request.getMemo())
+        .isRandom(request.getIsRandom())
+        .startDate(request.getStartDate())
+        .endDate(request.getEndDate())
+        .recurringType(request.getRecurringType())
+        .repeatDays(request.getRepeatDays())
+        .isActive(true)
         .build();
     todoRepository.save(todo);
 
-    // 2. 첫 실행 인스턴스 즉시 생성
-    saveInstance(todo, room, defaultAssignee, request.getStartDate());
+    // 3. 첫 실행 인스턴스 생성
+    // determineAssignee를 사용해 랜덤 여부에 따른 실제 담당자 배정
+    User actualAssignee = determineAssignee(todo, null);
+    TodoInstance instance = TodoInstance.builder()
+        .todo(todo)
+        .room(myRoom)
+        .actualAssignee(actualAssignee)
+        .title(todo.getTitle())
+        .memo(todo.getMemo())
+        .targetDate(todo.getStartDate())
+        .status(TodoStatus.PENDING)
+        .build();
+    todoInstanceRepository.save(instance);
+
+    // 4. 저장된 엔티티들을 사용하여 응답 생성
+    return TodoConverter.toCreateResponse(todo, instance);
+  }
+
+  /**
+   * [할 일 수정 및 변경사항 전파]
+   * 반영 항목: 반복 규칙, 제목, 메모 등 수정된 모든 값
+   */
+  @Override
+  @Transactional
+  public TodoCreateResponse updateTodo(Long userId, Long todoId, TodoUpdateRequest request) {
+    Todo todo = todoRepository.findById(todoId)
+        .orElseThrow(() -> new EntityNotFoundException("수정할 데이터를 찾을 수 없습니다."));
+
+    User newAssignee = (request.getAssigneeId() != null)
+        ? userRepository.findById(request.getAssigneeId()).orElse(todo.getDefaultAssignee())
+        : todo.getDefaultAssignee();
+
+    // 1. 마스터 수정
+    todo.update(request.getTitle(), request.getMemo(), newAssignee, request.getIsRandom(),
+        request.getRecurringType(), request.getRepeatDays(), request.getStartDate(), request.getEndDate());
+
+    // 2. 미래 인스턴스 전파
+    List<TodoInstance> futureInstances = todoInstanceRepository.findAllByTodoIdAndTargetDateAfter(todoId, LocalDate.now());
+    futureInstances.forEach(instance -> instance.updateFromMaster(request.getTitle(), request.getMemo(), newAssignee));
+
+    return TodoConverter.toCreateResponse(todo, null); // 수정 시엔 특정 인스턴스 ID가 모호하므로 null 처리
   }
 
   /**
@@ -90,9 +139,11 @@ public class TodoServiceImpl implements TodoService {
     LocalDate today = LocalDate.now();
     PageRequest pageRequest = PageRequest.of(0, 10);
 
+
     Slice<TodoInstance> missedSlice = fetchMissedTodos(userId, today, missedCursor, pageRequest);
     Slice<TodoInstance> todaySlice = fetchTodayTodos(userId, today, todayCursor, pageRequest);
     Slice<TodoInstance> upcomingSlice = fetchUpcomingTodos(userId, today, upcomingCursor, pageRequest);
+    log.info("조회결과 유저:{}, 날짜:{}, 미룬일:{}, 오늘할일:{}, 예정된일{}", userId, today, missedSlice.getContent().size(), todaySlice.getContent().size(), upcomingSlice.getContent().size());
 
     return MyTodoListResponse.builder()
         .missedTodos(TodoConverter.toPagedResponse(missedSlice))
@@ -138,11 +189,14 @@ public class TodoServiceImpl implements TodoService {
   }
 
   /**
-   * [우리 집 오늘 할 일 전체 조회]
+   * [우리 집 할 일 - 오늘 할 일]
    */
   @Override
-  public List<TodoSummaryResponse> getRoomTodoList(Long roomId) {
+  public List<TodoSummaryResponse> getRoomTodoList(Long userId) {
     // 오늘 날짜이면서 미완료(PENDING) 우선, 그 다음 생성순 정렬
+    Long roomId = getActiveRoomMember(userId).getRoomId();
+    log.info("조회 요청 유저 ID: {}, 찾아낸 방 ID: {}", userId, roomId);
+
     return todoInstanceRepository.findRoomTodayTodos(roomId, LocalDate.now())
         .stream()
         .map(TodoConverter::toSummaryResponse)
@@ -150,28 +204,30 @@ public class TodoServiceImpl implements TodoService {
   }
 
   /**
-   * [우리 집 지연된 할 일 전체 조회]
+   * [우리 집 할 일 - 지연된 할 일]
    */
   @Override
-  public List<TodoSummaryResponse> getRoomDelayedTodo(Long roomId) {
+  public List<TodoSummaryResponse> getRoomDelayedTodo(Long userId) {
+    Long roomId = getActiveRoomMember(userId).getRoomId();
     LocalDate today = LocalDate.now();
     // 오늘 이전 날짜이면서 미완료인 것들을 오래된 날짜순(Asc)으로 정렬 (D+5, D+3...)
-    return todoInstanceRepository.findRoomDelayedTodos(
-            roomId, today, TodoStatus.PENDING)
+    return todoInstanceRepository.findRoomDelayedTodos(roomId, today, TodoStatus.PENDING)
         .stream()
         .map(TodoConverter::toSummaryResponse)
         .collect(Collectors.toList());
   }
 
   /**
-   * [우리 집 모든 할 일 전체 조회]
+   * [우리 집 할 일 - 모든 할 일]
    */
   @Override
-  public List<TodoSummaryResponse> getRoomAllTodo(Long roomId) {
+  public List<TodoSummaryResponse> getRoomAllTodo(Long userId) {
+    Long roomId = getActiveRoomMember(userId).getRoomId();
     // 오늘을 포함하여 모든 미완료 및 오늘 완료된 건을 최신순으로 조회
-    return todoInstanceRepository.findRoomAllTodos(
-            roomId, LocalDate.now())
+    return todoInstanceRepository.findAllByRoomIdAndStatusNot(roomId, TodoStatus.COMPLETED)
         .stream()
+        .sorted(Comparator.comparing(TodoInstance::getTargetDate)
+            .thenComparing(TodoInstance::getCreatedAt))
         .map(TodoConverter::toSummaryResponse)
         .collect(Collectors.toList());
   }
@@ -193,7 +249,8 @@ public class TodoServiceImpl implements TodoService {
    * [완료된 할 일 모아보기]
    */
   @Override
-  public Slice<TodoCompletedResponse> getCompletedTodos(Long roomId, int page, int size) {
+  public Slice<TodoCompletedResponse> getCompletedTodos(Long userId, int page, int size) {
+    Long roomId = getActiveRoomMember(userId).getRoomId();
     Slice<TodoInstance> completed = todoInstanceRepository.findCompletedTodos(
         roomId, TodoStatus.COMPLETED, PageRequest.of(page, size));
     return completed.map(TodoConverter::toCompletedDTO);
@@ -212,7 +269,7 @@ public class TodoServiceImpl implements TodoService {
         .orElseThrow(() -> new EntityNotFoundException("해당 할 일 일정을 찾을 수 없습니다."));
 
     // 2. 권한 확인 (본인 담당인지 확인)
-    if (!instance.getActualAssignee().getId().equals(userId)) {
+    if (instance.getActualAssignee().getId().longValue() != userId.longValue()) {
       throw new AccessDeniedException("본인에게 할당된 할 일만 완료할 수 있습니다.");
     }
 
@@ -266,31 +323,6 @@ public class TodoServiceImpl implements TodoService {
   }
 
   /**
-   * [할 일 수정 및 변경사항 전파]
-   * 반영 항목: 반복 규칙, 제목, 메모 등 수정된 모든 값
-   */
-  @Override
-  @Transactional
-  public void updateTodo(Long userId, Long todoId, TodoUpdateRequest request) {
-    Todo todo = todoRepository.findById(todoId)
-        .orElseThrow(() -> new EntityNotFoundException("수정할 원본 데이터가 없습니다.")); // 에러코드 적용 대상
-
-    User newAssignee = (request.getAssigneeId() != null)
-        ? userRepository.findById(request.getAssigneeId()).orElse(todo.getDefaultAssignee())
-        : todo.getDefaultAssignee();
-
-    // 1. 마스터 정보 수정 (파라미터 추가)
-    todo.update(request.getTitle(), request.getMemo(), newAssignee, request.getIsRandom(),
-        request.getRecurringType(), request.getRepeatDays(), request.getStartDate(), request.getEndDate());
-
-    // 2. 미래 인스턴스 업데이트
-    List<TodoInstance> futureInstances = todoInstanceRepository.findAllByTodoIdAndTargetDateAfter(todoId, LocalDate.now());
-    futureInstances.forEach(instance -> {
-      instance.updateFromMaster(request.getTitle(), request.getMemo(), newAssignee);
-    });
-  }
-
-  /**
    * [반복 일정 자동 생성 배치]
    * 생성 시점에 2주치(14일분) 일정을 미리 생성
    */
@@ -328,14 +360,14 @@ public class TodoServiceImpl implements TodoService {
 
   // --- 헬퍼 메서드 ---
 
-  private void saveInstance(Todo todo, Room room, User assignee, LocalDate date) {
+  private TodoInstance saveInstance(Todo todo, Room room, User assignee, LocalDate date) {
     TodoInstance instance = TodoInstance.builder()
         .todo(todo).room(room).actualAssignee(assignee)
         // 인스턴스 엔티티에 추가된 title, memo 필드에 마스터 값 복사
         .title(todo.getTitle()).memo(todo.getMemo())
         .targetDate(date).status(TodoStatus.PENDING)
         .build();
-    todoInstanceRepository.save(instance);
+    return todoInstanceRepository.save(instance);
   }
 
   private boolean isInvalidDate(Todo todo, LocalDate date) {
@@ -371,7 +403,7 @@ public class TodoServiceImpl implements TodoService {
     Long cursorId;
 
     if (cursor == null || cursor.isBlank()) {
-      // MySQL DATE 범위를 넘지 않도록 9999년으로 설정
+      // 내림차순 조회를 위해 가장 큰 날짜/ID에서 시작
       cursorDate = LocalDate.of(9999, 12, 31);
       cursorId = Long.MAX_VALUE;
     } else {
@@ -393,12 +425,30 @@ public class TodoServiceImpl implements TodoService {
 
   private Slice<TodoInstance> fetchUpcomingTodos(Long userId, LocalDate today, String cursor, Pageable pageable) {
     LocalDate cursorDate = today.plusDays(1);
-    Long cursorId = 0L;
-    if (cursor != null && !cursor.isBlank()) {
+    Long cursorId;
+
+    if (cursor == null || cursor.isBlank()) {
+      // 오름차순 조회를 위해 오늘 날짜부터 시작
+      cursorDate = today;
+      cursorId = 0L;
+    } else {
       String[] parts = cursor.split("_");
       cursorDate = LocalDate.parse(parts[0]);
       cursorId = Long.parseLong(parts[1]);
     }
     return todoInstanceRepository.findUpcomingTodosWithCursor(userId, today, cursorDate, cursorId, pageable);
+  }
+
+  private RoomMember getActiveRoomMember(Long userId) {
+    return roomMemberRepository.findByUserIdAndLeftAtIsNull(userId)
+        .orElseThrow(() -> new BusinessException(RoomErrorCode.ROOM_NOT_FOUND));
+  }
+
+  private Room findRoomById(Long roomId) {
+    return roomRepository.findByIdAndDeletedAtIsNull(roomId)
+        .orElseThrow(() -> {
+          log.warn("[RoomService] 방을 찾을 수 없음. roomId={}", roomId);
+          return new BusinessException(RoomErrorCode.ROOM_NOT_FOUND);
+        });
   }
 }
