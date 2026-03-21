@@ -15,7 +15,7 @@ public class RoomResponse {
     private String motto;
     private Long ownerId;
     private Long membersCount;
-    private Long score;
+    private Double score;
     private String invitationCode;
 
     private int ruleWarningCount; // 방 전체 규칙 경고 수

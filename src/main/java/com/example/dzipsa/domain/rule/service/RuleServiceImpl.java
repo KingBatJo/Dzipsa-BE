@@ -1,5 +1,6 @@
 package com.example.dzipsa.domain.rule.service;
 
+import com.example.dzipsa.domain.room.entity.Room;
 import com.example.dzipsa.domain.room.entity.RoomMember;
 import com.example.dzipsa.domain.room.repository.RoomMemberRepository;
 import com.example.dzipsa.domain.room.repository.RoomRepository;
@@ -53,7 +54,7 @@ public class RuleServiceImpl implements RuleService {
         Rule rule = ruleConverter.toRule(request, myMember.getRoomId(), user.getId());
         ruleRepository.save(rule);
 
-        return ruleConverter.toRuleResponse(rule, false);
+        return ruleConverter.toRuleResponse(rule, false, 0);
     }
 
     @Override
@@ -89,7 +90,8 @@ public class RuleServiceImpl implements RuleService {
                 request.isNotiEnabled()
         );
 
-        return ruleConverter.toRuleResponse(rule, isWarningDisabled(rule.getId()));
+        int totalWarningCount = ruleWarningRepository.countByRuleId(rule.getId());
+        return ruleConverter.toRuleResponse(rule, isWarningDisabled(rule.getId()), totalWarningCount);
     }
 
     @Override
@@ -102,7 +104,8 @@ public class RuleServiceImpl implements RuleService {
             throw new BusinessException(RoomErrorCode.NOT_ROOM_MEMBER);
         }
 
-        return ruleConverter.toRuleResponse(rule, isWarningDisabled(rule.getId()));
+        int totalWarningCount = ruleWarningRepository.countByRuleId(rule.getId());
+        return ruleConverter.toRuleResponse(rule, isWarningDisabled(rule.getId()), totalWarningCount);
     }
 
     @Override
@@ -146,6 +149,11 @@ public class RuleServiceImpl implements RuleService {
                 .ruleId(rule.getId())
                 .build();
         ruleWarningRepository.save(warning);
+
+        // 방 점수 감소 (-0.5점)
+        Room room = roomRepository.findByIdAndDeletedAtIsNull(rule.getRoomId())
+                .orElseThrow(() -> new BusinessException(RoomErrorCode.ROOM_NOT_FOUND));
+        room.decreaseScore(0.5);
 
         return ruleConverter.toRuleWarningResponse(warning, rule.getTitle());
     }
