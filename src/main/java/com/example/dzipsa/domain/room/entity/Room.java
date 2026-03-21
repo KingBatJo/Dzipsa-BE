@@ -43,7 +43,7 @@ public class Room {
 
     @NotNull
     @Column(nullable = false)
-    private Long score; // 방 점수
+    private Double score; // 방 점수
 
     @NotNull
     @CreatedDate
@@ -61,7 +61,7 @@ public class Room {
         this.motto = motto;
         this.ownerId = ownerId;
         this.membersCount = 1L;
-        this.score = 3L; // 생성 시 기본 점수 3점
+        this.score = 3.0; // 생성 시 기본 점수 3점
     }
 
     public void updateName(String name) {
@@ -93,8 +93,24 @@ public class Room {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public void addScore(Long points) {
+    public void decreaseScore(double points) {
+        this.score -= points;
+        if (this.score < 1.0) {
+            this.score = 1.0;
+        }
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void increaseScore(double points) {
         this.score += points;
+        if (this.score > 5.0) {
+            this.score = 5.0;
+        }
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void resetScore() {
+        this.score = 3.0;
         this.updatedAt = LocalDateTime.now();
     }
 }

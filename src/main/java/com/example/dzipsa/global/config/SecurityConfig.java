@@ -62,6 +62,7 @@ public class SecurityConfig {
                     "/swagger-ui/**",
                     "/v3/api-docs/**"
                 ).permitAll()
+                .requestMatchers("/api/admin/**").hasRole("ADMIN") // 관리자 API 권한 설정
                 .anyRequest().authenticated())
             .exceptionHandling(exception -> exception
                 .authenticationEntryPoint(customAuthenticationEntryPoint)) // 인증 실패 시 401 JSON 응답
