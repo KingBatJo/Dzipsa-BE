@@ -88,7 +88,9 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
             // 2-1. 이메일과 Provider가 모두 일치하고, 상태가 DELETED인 경우 -> 재가입 처리
             if (existingUser.getStatus() == UserStatus.DELETED) {
                 log.info("[CustomOAuth2UserService] 탈퇴한 사용자 재가입 처리. userId={}", existingUser.getId());
-                existingUser.rejoin(userInfo.getNickname());
+                // 닉네임이 null인 경우 "임시닉네임" 문자열로 대체
+                String nickname = userInfo.getNickname() != null ? userInfo.getNickname() : "임시닉네임";
+                existingUser.rejoin(nickname);
                 createOAuthAccount(existingUser, provider, userInfo.getProviderId());
                 return existingUser;
             }
@@ -106,9 +108,13 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
     private User createUserAndOAuthAccount(OAuth2UserInfo userInfo, OAuthProvider provider) {
         log.info("[CustomOAuth2UserService] 신규 사용자 가입 처리. email={}, provider={}", userInfo.getEmail(), provider.name());
+        
+        // 닉네임이 null인 경우 "임시닉네임" 문자열로 대체
+        String nickname = userInfo.getNickname() != null ? userInfo.getNickname() : "임시닉네임";
+        
         User newUser = User.builder()
                 .email(userInfo.getEmail())
-                .nickname(userInfo.getNickname())
+                .nickname(nickname)
                 .status(UserStatus.ACTIVE)
                 .providerType(ProviderType.valueOf(userInfo.getProvider().toUpperCase()))
                 .build();
