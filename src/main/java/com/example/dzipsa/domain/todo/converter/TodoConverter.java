@@ -2,7 +2,9 @@ package com.example.dzipsa.domain.todo.converter;
 
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
+import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
+import com.example.dzipsa.domain.todo.entity.Todo;
 import com.example.dzipsa.domain.todo.entity.TodoInstance;
 import com.example.dzipsa.domain.todo.entity.enums.TodoStatus;
 import com.example.dzipsa.domain.user.entity.User;
@@ -73,5 +75,20 @@ public class TodoConverter {
     if (!slice.hasContent()) return null;
     TodoInstance lastItem = slice.getContent().get(slice.getContent().size() - 1);
     return lastItem.getTargetDate().toString() + "_" + lastItem.getId();
+  }
+
+  public static TodoCreateResponse toCreateResponse(Todo todo, TodoInstance instance) {
+    return TodoCreateResponse.builder()
+        .todoId(todo.getId())
+        .instanceId(instance != null ? instance.getId() : null)
+        .title(todo.getTitle())
+        .memo(todo.getMemo())
+        .defaultAssigneeId(todo.getDefaultAssignee() != null ? todo.getDefaultAssignee().getId() : null)
+        .isRandom(todo.getIsRandom())
+        .recurringType(todo.getRecurringType())
+        .repeatDays(todo.getRepeatDays())
+        .startDate(todo.getStartDate())
+        .endDate(todo.getEndDate())
+        .build();
   }
 }
