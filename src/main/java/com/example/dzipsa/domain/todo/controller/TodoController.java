@@ -4,12 +4,15 @@ import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
+import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.todo.service.TodoService;
+import com.example.dzipsa.domain.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Slice;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.MediaType;
@@ -28,15 +31,27 @@ public class TodoController {
   /**
    * [할 일 신규 등록]
    * URL: POST /api/todos
-   * @param roomId 할 일이 속할 방 ID
    * @param request 제목, 메모, 반복 설정 등 상세 정보
    */
   @PostMapping
-  public ResponseEntity<Void> createTodo(
-      @RequestParam Long roomId,
+  public ResponseEntity<TodoCreateResponse> createTodo(
+      @AuthenticationPrincipal User user,
       @RequestBody TodoCreateRequest request) {
-    todoService.createTodo(1L, roomId, request);
-    return ResponseEntity.ok().build();
+    TodoCreateResponse response = todoService.createTodo(user, request);
+    return ResponseEntity.ok(response);
+  }
+
+  /**
+   * [할 일 원본 설정 수정 및 미래 담당자 전파]
+   * URL: PUT /api/todos/{todoId}
+   * 마스터 정보를 수정하며, 오늘 이후 예정된 미완료 인스턴스들에 변경 사항을 반영
+   */
+  @PutMapping("/{todoId}")
+  public ResponseEntity<TodoCreateResponse> updateTodo(
+      @AuthenticationPrincipal User user,
+      @PathVariable Long todoId,
+      @RequestBody TodoUpdateRequest request) {
+    return ResponseEntity.ok(todoService.updateTodo(user.getId(), todoId, request));
   }
 
   /**
@@ -46,10 +61,11 @@ public class TodoController {
    */
   @GetMapping("/me/all")
   public ResponseEntity<MyTodoListResponse> getMyTodoList(
+      @AuthenticationPrincipal User user,
       @RequestParam(required = false) String missedCursor,
       @RequestParam(required = false) String todayCursor,
       @RequestParam(required = false) String upcomingCursor) {
-    MyTodoListResponse response = todoService.getMyTodoList(1L, missedCursor, todayCursor, upcomingCursor);
+    MyTodoListResponse response = todoService.getMyTodoList(user.getId(), missedCursor, todayCursor, upcomingCursor);
     return ResponseEntity.ok(response);
   }
 
@@ -60,8 +76,9 @@ public class TodoController {
    */
   @GetMapping("/me/missed")
   public ResponseEntity<MyTodoListResponse.PagedTodoResponse> getMissedTodos(
+      @AuthenticationPrincipal User user,
       @RequestParam(required = false) String cursor) {
-    return ResponseEntity.ok(todoService.getMissedTodos(1L, cursor));
+    return ResponseEntity.ok(todoService.getMissedTodos(user.getId(), cursor));
   }
 
   /**
@@ -71,8 +88,9 @@ public class TodoController {
    */
   @GetMapping("/me/today")
   public ResponseEntity<MyTodoListResponse.PagedTodoResponse> getTodayTodos(
+      @AuthenticationPrincipal User user,
       @RequestParam(required = false) String cursor) {
-    return ResponseEntity.ok(todoService.getTodayTodos(1L, cursor));
+    return ResponseEntity.ok(todoService.getTodayTodos(user.getId(), cursor));
   }
 
   /**
@@ -82,8 +100,9 @@ public class TodoController {
    */
   @GetMapping("/me/upcoming")
   public ResponseEntity<MyTodoListResponse.PagedTodoResponse> getUpcomingTodos(
+      @AuthenticationPrincipal User user,
       @RequestParam(required = false) String cursor) {
-    return ResponseEntity.ok(todoService.getUpcomingTodos(1L, cursor));
+    return ResponseEntity.ok(todoService.getUpcomingTodos(user.getId(), cursor));
   }
 
   /**
@@ -93,8 +112,8 @@ public class TodoController {
    */
   @GetMapping("/room/today")
   public ResponseEntity<List<TodoSummaryResponse>> getRoomTodayTodo(
-      @RequestParam Long roomId) {
-    List<TodoSummaryResponse> response = todoService.getRoomTodoList(roomId);
+      @AuthenticationPrincipal User user) {
+    List<TodoSummaryResponse> response = todoService.getRoomTodoList(user.getId());
     return ResponseEntity.ok(response);
   }
 
@@ -104,9 +123,21 @@ public class TodoController {
    */
   @GetMapping("/room/delayed")
   public ResponseEntity<List<TodoSummaryResponse>> getRoomDelayedTodo(
-      @RequestParam Long roomId) {
+      @AuthenticationPrincipal User user) {
     // 기존 build()에서 서비스 호출로 변경
-    List<TodoSummaryResponse> response = todoService.getRoomDelayedTodo(roomId);
+    List<TodoSummaryResponse> response = todoService.getRoomDelayedTodo(user.getId());
+    return ResponseEntity.ok(response);
+  }
+
+  /**
+   * [우리집 할 일 - 전체 할 일 통합 현황 조회]
+   * 지연/오늘/예정 데이터를 마감일 순으로 통합 조회
+   * URL: GET /api/todos/room/all
+   */
+  @GetMapping("/room/all")
+  public ResponseEntity<List<TodoSummaryResponse>> getRoomAllTodo(
+      @AuthenticationPrincipal User user) {
+    List<TodoSummaryResponse> response = todoService.getRoomAllTodo(user.getId());
     return ResponseEntity.ok(response);
   }
 
@@ -117,10 +148,10 @@ public class TodoController {
    */
   @DeleteMapping("/instances/{instanceId}/image")
   public ResponseEntity<Void> deleteTodoImage(
+      @AuthenticationPrincipal User user,
       @PathVariable Long instanceId) {
-    // 현재 로그인한 유저 ID (예시 1L)
-    Long userId = 1L;
-    todoService.deleteTodoImage(userId, instanceId);
+
+    todoService.deleteTodoImage(user.getId(), instanceId);
     return ResponseEntity.ok().build();
   }
 
@@ -131,10 +162,10 @@ public class TodoController {
    */
   @GetMapping("/completed")
   public ResponseEntity<Slice<TodoCompletedResponse>> getCompletedTodos(
-      @RequestParam Long roomId,
+      @AuthenticationPrincipal User user,
       @RequestParam(defaultValue = "0") int page,
       @RequestParam(defaultValue = "10") int size) {
-    Slice<TodoCompletedResponse> response = todoService.getCompletedTodos(roomId, page, size);
+    Slice<TodoCompletedResponse> response = todoService.getCompletedTodos(user.getId(), page, size);
     return ResponseEntity.ok(response);
   }
 
@@ -145,25 +176,11 @@ public class TodoController {
    */
   @PatchMapping(value = "/instances/{instanceId}/complete", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
   public ResponseEntity<Void> completeTodo(
+      @AuthenticationPrincipal User user,
       @PathVariable Long instanceId,
       @RequestPart(value = "image", required = false) MultipartFile image // 선택 사항으로 변경
   ) {
-    // 현재 로그인한 유저 ID를 가져오는 로직 (예시로 1L 사용)
-    Long userId = 1L;
-    todoService.completeTodo(userId, instanceId, image);
-    return ResponseEntity.ok().build();
-  }
-
-  /**
-   * [할 일 원본 설정 수정 및 미래 담당자 전파]
-   * URL: PUT /api/todos/{todoId}
-   * 마스터 정보를 수정하며, 오늘 이후 예정된 미완료 인스턴스들에 변경 사항을 반영
-   */
-  @PutMapping("/{todoId}")
-  public ResponseEntity<Void> updateTodo(
-      @PathVariable Long todoId,
-      @RequestBody TodoUpdateRequest request) {
-    todoService.updateTodo(1L, todoId, request);
+    todoService.completeTodo(user.getId(), instanceId, image);
     return ResponseEntity.ok().build();
   }
 
