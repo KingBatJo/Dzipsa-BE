@@ -28,7 +28,7 @@ public class RuleController {
     private final RuleService ruleService;
 
     @PostMapping
-    @Operation(summary = "규칙 등록", description = "방장만 규칙을 등록할 수 있습니다.")
+    @Operation(summary = "규칙 등록", description = "규칙을 등록할 수 있습니다.")
     public ResponseEntity<RuleResponse> createRule(
             @Valid @RequestBody RuleCreateRequest request,
             @AuthenticationPrincipal User user) {
@@ -37,7 +37,7 @@ public class RuleController {
     }
 
     @PatchMapping("/{ruleId}")
-    @Operation(summary = "규칙 수정", description = "방장만 규칙을 수정할 수 있습니다.")
+    @Operation(summary = "규칙 수정", description = "규칙을 수정할 수 있습니다.")
     public ResponseEntity<RuleResponse> updateRule(
             @PathVariable Long ruleId,
             @Valid @RequestBody RuleUpdateRequest request,
@@ -68,7 +68,7 @@ public class RuleController {
     }
 
     @DeleteMapping("/{ruleId}")
-    @Operation(summary = "규칙 삭제", description = "방장만 규칙을 삭제할 수 있습니다.")
+    @Operation(summary = "규칙 삭제", description = "규칙을 삭제할 수 있습니다.")
     public ResponseEntity<Void> deleteRule(
             @PathVariable Long ruleId,
             @AuthenticationPrincipal User user) {

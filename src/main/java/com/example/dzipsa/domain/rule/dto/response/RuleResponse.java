@@ -49,4 +49,7 @@ public class RuleResponse {
 
     @Schema(description = "집사에게 알리기 비활성화 여부 (24시간 내 이미 알린 경우 true)")
     private boolean warningDisabled;
+
+    @Schema(description = "집사에게 알리기 총 횟수")
+    private int totalWarningCount;
 }

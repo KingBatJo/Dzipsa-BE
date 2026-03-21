@@ -46,11 +46,7 @@ public class RuleConverter {
                 .build();
     }
 
-    public RuleResponse toRuleResponse(Rule rule, boolean isWarningDisabled) {
-        return toRuleResponse(rule, isWarningDisabled, false);
-    }
-
-    public RuleResponse toRuleResponse(Rule rule, boolean isWarningDisabled, boolean isDetail) {
+    public RuleResponse toRuleResponse(Rule rule, boolean isWarningDisabled, int totalWarningCount) {
         return RuleResponse.builder()
                 .id(rule.getId())
                 .roomId(rule.getRoomId())
@@ -64,6 +60,7 @@ public class RuleConverter {
                 .repeatDays(rule.getRepeatDays())
                 .notiEnabled(rule.isNotiEnabled())
                 .warningDisabled(isWarningDisabled)
+                .totalWarningCount(totalWarningCount)
                 .build();
     }
 
