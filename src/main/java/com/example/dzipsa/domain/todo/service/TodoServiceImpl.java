@@ -11,6 +11,7 @@ import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
+import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoNudgeResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.todo.entity.Todo;
@@ -63,16 +64,15 @@ public class TodoServiceImpl implements TodoService {
   @Override
   @Transactional
   public TodoCreateResponse createTodo(User user, TodoCreateRequest request) {
+    // 1. 기본 설정 및 Todo 저장 (기존 코드 동일)
     RoomMember myMember = getActiveRoomMember(user.getId());
     Room myRoom = findRoomById(myMember.getRoomId());
 
-    // 1. 담당자 결정: 프론트가 준 ID가 있으면 사용, 없으면 본인
     User targetAssignee = (request.getAssigneeId() != null)
         ? userRepository.findById(request.getAssigneeId())
         .orElseThrow(() -> new EntityNotFoundException("지정된 담당자를 찾을 수 없습니다."))
         : user;
 
-    // 2. Todo 마스터 저장 (앞으로의 기본값)
     Todo todo = Todo.builder()
         .room(myRoom)
         .writer(user)
@@ -88,15 +88,23 @@ public class TodoServiceImpl implements TodoService {
         .build();
     todoRepository.save(todo);
 
-    // 3. 즉시 인스턴스 생성 로직 (반복 설정에 따라 14일치 미리 생성)
+    // 2. 인스턴스 생성 및 응답에 보낼 인스턴스 추출
+    TodoInstance representInstance = null;
+
     if (todo.getRecurringType() == RecurringType.NONE) {
-      saveInstance(todo, myRoom, targetAssignee, todo.getStartDate());
+      // 반복 없음: 생성된 단일 인스턴스를 바로 할당
+      representInstance = saveInstance(todo, myRoom, targetAssignee, todo.getStartDate());
     } else {
-      // 반복 설정이 있다면 시작일로부터 즉시 14일치를 생성하여 유저에게 노출
+      // 반복 설정: 14일치 생성 후, 그중 '오늘' 날짜인 것이 있다면 응답에 포함
       todoBatchService.generateInstancesRange(todo, todo.getStartDate(), todo.getStartDate().plusDays(14));
+
+      // 오늘 날짜의 인스턴스가 생성되었는지 확인 (방금 생성한 것 중 오늘 날짜 조회)
+      representInstance = todoInstanceRepository.findByTodoIdAndTargetDate(todo.getId(), LocalDate.now())
+          .orElse(null);
     }
 
-    return TodoConverter.toCreateResponse(todo, null);
+    // 3. 추출한 인스턴스를 컨버터에 전달 (이제 null이 아니게 됩니다!)
+    return TodoConverter.toCreateResponse(todo, representInstance);
   }
 
   /**
@@ -106,15 +114,17 @@ public class TodoServiceImpl implements TodoService {
   @Override
   @Transactional
   public TodoCreateResponse updateTodo(Long userId, Long todoId, TodoUpdateRequest request) {
+    // 1. 마스터 데이터 조회
     Todo todo = todoRepository.findById(todoId)
         .orElseThrow(() -> new EntityNotFoundException("수정할 데이터를 찾을 수 없습니다."));
 
+    // 2. 담당자 확인
     User newAssignee = (request.getAssigneeId() != null)
         ? userRepository.findById(request.getAssigneeId())
         .orElseThrow(() -> new EntityNotFoundException("지정된 담당자를 찾을 수 없습니다."))
         : todo.getDefaultAssignee();
 
-    // 1. 마스터 수정
+    // 3. Todo 마스터 정보 업데이트
     todo.update(
         request.getTitle(),
         request.getMemo(),
@@ -126,11 +136,15 @@ public class TodoServiceImpl implements TodoService {
         request.getEndDate()
     );
 
-    // 2. 아직 완료되지 않은(PENDING) 미래 인스턴스들에게 변경사항 전파
-    List<TodoInstance> futureInstances = todoInstanceRepository.findAllByTodoIdAndTargetDateAfter(todoId, LocalDate.now());
-    futureInstances.forEach(instance -> instance.updateFromMaster(request.getTitle(), request.getMemo(), newAssignee));
+    // 4. 요일이나 규칙이 바뀌었을 수 있으므로 배치 서비스를 호출해 인스턴스들을 재정비
+    // 오늘부터 향후 14일간의 데이터를 수정된 규칙에 맞게 생성/갱신
+    todoBatchService.generateInstancesRange(todo, LocalDate.now(), LocalDate.now().plusDays(14));
 
-    return TodoConverter.toCreateResponse(todo, null);
+    // 5. 수정한 직후 '오늘' 수행해야 할 인스턴스가 있는지 다시 조회
+    TodoInstance representInstance = todoInstanceRepository.findByTodoIdAndTargetDate(todo.getId(), LocalDate.now())
+        .orElse(null);
+
+    return TodoConverter.toCreateResponse(todo, representInstance);
   }
 
   /**
@@ -325,6 +339,47 @@ public class TodoServiceImpl implements TodoService {
     }
 
     instance.removeImage();
+  }
+
+  /**
+   * 할 일 상세 조회
+   * @param userId 조회 요청자 ID (본인 여부 확인용)
+   * @param instanceId 조회할 특정 일자 할 일(Instance)의 ID
+   * @return 할 일 상세 정보 (상태, 반복정보, 담당자 포함)
+   */
+  @Override
+  @Transactional(readOnly = true)
+  public TodoDetailResponse getTodoDetail(Long userId, Long instanceId) {
+    // 1. DB에서 해당 Instance 존재 여부 확인
+    TodoInstance instance = todoInstanceRepository.findById(instanceId)
+        .orElseThrow(() -> new EntityNotFoundException("해당 할 일 일정을 찾을 수 없습니다. ID: " + instanceId));
+
+    // 2. Converter를 통해 엔티티를 응답 DTO로 변환
+    // (상태값 계산 및 반복 주기 한글화 로직은 Converter 내부에서 수행)
+    return TodoConverter.toDetailResponse(instance, userId);
+  }
+
+  /**
+   * 할 일 상태 초기화 (완료 -> 진행 중으로 변경)
+   * * @param userId 요청자 ID (권한 검증용)
+   * @param instanceId 상태를 변경할 할 일 ID
+   */
+  @Override
+  @Transactional
+  public void resetTodoStatus(Long userId, Long instanceId) {
+    // 1. 해당 Instance 데이터 조회
+    TodoInstance instance = todoInstanceRepository.findById(instanceId)
+        .orElseThrow(() -> new EntityNotFoundException("해당 할 일 일정을 찾을 수 없습니다. ID: " + instanceId));
+
+    // 2. 권한 검증: 현재 할 일의 실제 담당자(Assignee)와 요청한 사용자가 일치하는지 확인
+    // (본인의 할 일만 상태를 '진행 중'으로 되돌릴 수 있음)
+    if (!instance.getActualAssignee().getId().equals(userId)) {
+      throw new AccessDeniedException("본인의 할 일만 상태를 변경할 수 있습니다.");
+    }
+
+    // 3. 엔티티 상태 변경
+    // TodoStatus를 PENDING(진행 중)으로 변경하고, 완료 일시(completedAt)를 초기화함
+    instance.resetToPending();
   }
 
   // --- 헬퍼 메서드 ---
