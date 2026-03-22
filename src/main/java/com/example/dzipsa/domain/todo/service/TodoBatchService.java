@@ -122,9 +122,12 @@ public class TodoBatchService {
       int dayOfWeek = targetDate.getDayOfWeek().getValue();
       return todo.getRepeatDays() != null && todo.getRepeatDays().contains(String.valueOf(dayOfWeek));
     }
+
     if (type == RecurringType.MONTHLY) {
-      return todo.getStartDate().getDayOfMonth() == targetDate.getDayOfMonth();
+      if (todo.getRepeatDays() == null) return false;
+      return String.valueOf(targetDate.getDayOfMonth()).equals(todo.getRepeatDays());
     }
+
     return false;
   }
 }
