@@ -67,16 +67,17 @@ public class TodoServiceImpl implements TodoService {
     RoomMember myMember = getActiveRoomMember(user.getId());
     Room myRoom = findRoomById(myMember.getRoomId());
 
-    // 1. 담당자 결정 (요청에 있으면 해당 유저, 없으면 본인)
-    User defaultAssignee = (request.getDefaultAssigneeId() != null)
-        ? userRepository.findById(request.getDefaultAssigneeId()).orElse(user)
+    // 1. 담당자 결정: 프론트가 준 ID가 있으면 사용, 없으면 본인
+    User targetAssignee = (request.getAssigneeId() != null)
+        ? userRepository.findById(request.getAssigneeId())
+        .orElseThrow(() -> new EntityNotFoundException("지정된 담당자를 찾을 수 없습니다."))
         : user;
 
-    // 2. Todo 마스터 저장
+    // 2. Todo 마스터 저장 (앞으로의 기본값)
     Todo todo = Todo.builder()
         .room(myRoom)
         .writer(user)
-        .defaultAssignee(defaultAssignee)
+        .defaultAssignee(targetAssignee)
         .title(request.getTitle())
         .memo(request.getMemo())
         .isRandom(request.getIsRandom())
@@ -88,22 +89,10 @@ public class TodoServiceImpl implements TodoService {
         .build();
     todoRepository.save(todo);
 
-    // 3. 첫 실행 인스턴스 생성
-    // determineAssignee를 사용해 랜덤 여부에 따른 실제 담당자 배정
-    User actualAssignee = determineAssignee(todo, null);
-    TodoInstance instance = TodoInstance.builder()
-        .todo(todo)
-        .room(myRoom)
-        .actualAssignee(actualAssignee)
-        .title(todo.getTitle())
-        .memo(todo.getMemo())
-        .targetDate(todo.getStartDate())
-        .status(TodoStatus.PENDING)
-        .build();
-    todoInstanceRepository.save(instance);
+    // 3. 첫 실행 인스턴스 생성 (마스터와 동일한 담당자)
+    saveInstance(todo, myRoom, targetAssignee, todo.getStartDate());
 
-    // 4. 저장된 엔티티들을 사용하여 응답 생성
-    return TodoConverter.toCreateResponse(todo, instance);
+    return TodoConverter.toCreateResponse(todo, null); // 인스턴스 포함 필요 시 instance 전달
   }
 
   /**
@@ -116,19 +105,29 @@ public class TodoServiceImpl implements TodoService {
     Todo todo = todoRepository.findById(todoId)
         .orElseThrow(() -> new EntityNotFoundException("수정할 데이터를 찾을 수 없습니다."));
 
+    // 수정 시에도 assigneeId가 들어오면 해당 유저로 변경, 없으면 기존 담당자 유지
     User newAssignee = (request.getAssigneeId() != null)
-        ? userRepository.findById(request.getAssigneeId()).orElse(todo.getDefaultAssignee())
+        ? userRepository.findById(request.getAssigneeId())
+        .orElseThrow(() -> new EntityNotFoundException("지정된 담당자를 찾을 수 없습니다."))
         : todo.getDefaultAssignee();
 
     // 1. 마스터 수정
-    todo.update(request.getTitle(), request.getMemo(), newAssignee, request.getIsRandom(),
-        request.getRecurringType(), request.getRepeatDays(), request.getStartDate(), request.getEndDate());
+    todo.update(
+        request.getTitle(),
+        request.getMemo(),
+        newAssignee,
+        request.getIsRandom(),
+        request.getRecurringType(),
+        request.getRepeatDays(),
+        request.getStartDate(),
+        request.getEndDate()
+    );
 
-    // 2. 미래 인스턴스 전파
+    // 2. 아직 완료되지 않은(PENDING) 미래 인스턴스들에게 변경사항 전파
     List<TodoInstance> futureInstances = todoInstanceRepository.findAllByTodoIdAndTargetDateAfter(todoId, LocalDate.now());
     futureInstances.forEach(instance -> instance.updateFromMaster(request.getTitle(), request.getMemo(), newAssignee));
 
-    return TodoConverter.toCreateResponse(todo, null); // 수정 시엔 특정 인스턴스 ID가 모호하므로 null 처리
+    return TodoConverter.toCreateResponse(todo, null);
   }
 
   /**
@@ -236,10 +235,9 @@ public class TodoServiceImpl implements TodoService {
    * [특정 구성원의 할 일 조회]
    */
   @Override
-  public List<TodoSummaryResponse> getMemberTodo(Long roomId, Long userId) {
-    // 특정 유저에게 할당된 오늘까지의 할 일을 마감일순으로 조회
-    return todoInstanceRepository.findMemberTodos(
-            roomId, userId, LocalDate.now())
+  public List<TodoSummaryResponse> getMemberTodo(Long loginUserId, Long targetMemberId) {
+    Long roomId = getActiveRoomMember(loginUserId).getRoomId();
+    return todoInstanceRepository.findMemberTodos(roomId, targetMemberId)
         .stream()
         .map(TodoConverter::toSummaryResponse)
         .collect(Collectors.toList());
@@ -330,28 +328,18 @@ public class TodoServiceImpl implements TodoService {
   @Transactional
   public void generateRecurringTodos() {
     LocalDate today = LocalDate.now();
-    LocalDate maxDate = today.plusDays(14); // 확정된 2주치 범위
+    LocalDate maxDate = today.plusDays(14);
 
     List<Todo> activeTodos = todoRepository.findAllByIsActiveTrue();
 
     for (Todo todo : activeTodos) {
-      // 랜덤 배정 멤버 조회 로직 (User ID -> User 객체 변환)
-      List<User> roomMembers = Collections.emptyList();
-      if (Boolean.TRUE.equals(todo.getIsRandom())) {
-        List<Long> memberIds = roomMemberRepository.findByRoomIdAndLeftAtIsNullOrderByJoinedAtAsc(todo.getRoom().getId())
-            .stream()
-            .map(RoomMember::getUserId)
-            .collect(Collectors.toList());
-        roomMembers = userRepository.findAllById(memberIds);
-      }
-
       for (LocalDate targetDate = today; !targetDate.isAfter(maxDate); targetDate = targetDate.plusDays(1)) {
         if (isInvalidDate(todo, targetDate)) continue;
 
         if (isRecurringDay(todo, targetDate)) {
           if (!todoInstanceRepository.existsByTodoIdAndTargetDate(todo.getId(), targetDate)) {
-            User assignee = determineAssignee(todo, roomMembers);
-            saveInstance(todo, todo.getRoom(), assignee, targetDate);
+            // 마스터에 저장된 담당자를 그대로 할당
+            saveInstance(todo, todo.getRoom(), todo.getDefaultAssignee(), targetDate);
           }
         }
       }
@@ -362,10 +350,13 @@ public class TodoServiceImpl implements TodoService {
 
   private TodoInstance saveInstance(Todo todo, Room room, User assignee, LocalDate date) {
     TodoInstance instance = TodoInstance.builder()
-        .todo(todo).room(room).actualAssignee(assignee)
-        // 인스턴스 엔티티에 추가된 title, memo 필드에 마스터 값 복사
-        .title(todo.getTitle()).memo(todo.getMemo())
-        .targetDate(date).status(TodoStatus.PENDING)
+        .todo(todo)
+        .room(room)
+        .actualAssignee(assignee)
+        .title(todo.getTitle())
+        .memo(todo.getMemo())
+        .targetDate(date)
+        .status(TodoStatus.PENDING)
         .build();
     return todoInstanceRepository.save(instance);
   }
@@ -388,14 +379,6 @@ public class TodoServiceImpl implements TodoService {
     }
 
     return false;
-  }
-
-  private User determineAssignee(Todo todo, List<User> members) {
-    if (Boolean.TRUE.equals(todo.getIsRandom()) && members != null && !members.isEmpty()) {
-      int randomIndex = new Random().nextInt(members.size());
-      return members.get(randomIndex);
-    }
-    return todo.getDefaultAssignee();
   }
 
   private Slice<TodoInstance> fetchMissedTodos(Long userId, LocalDate today, String cursor, Pageable pageable) {
