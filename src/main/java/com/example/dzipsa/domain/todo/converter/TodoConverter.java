@@ -47,6 +47,7 @@ public class TodoConverter {
     return TodoSummaryResponse.builder()
         .instanceId(instance.getId())
         .title(instance.getTodo().getTitle())
+        .memo(instance.getTodo().getMemo())
         .assigneeId(assignee != null ? assignee.getId() : null)
         .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
         .profileImageUrl(assignee != null ? assignee.getProfileImageUrl() : null)
@@ -84,13 +85,17 @@ public class TodoConverter {
     return lastItem.getTargetDate().toString() + "_" + lastItem.getId();
   }
 
-  public static TodoCreateResponse toCreateResponse(Todo todo, TodoInstance instance) {
+  // 서비스에서 계산된 targetDate를 직접 받도록 파라미터 추가
+  public static TodoCreateResponse toCreateResponse(Todo todo, TodoInstance instance, LocalDate targetDate) {
+    // 1. 담당자 결정: 인스턴스가 있으면 인스턴스의 담당자, 없으면 기본 담당자
     User assignee = (instance != null) ? instance.getActualAssignee() : todo.getDefaultAssignee();
+
     return TodoCreateResponse.builder()
         .todoId(todo.getId())
-        .instanceId(instance != null ? instance.getId() : null)
+        .instanceId(instance != null ? instance.getId() : null) // 인스턴스 없으면 null
         .title(todo.getTitle())
         .memo(todo.getMemo())
+        .targetDate(targetDate) // 서비스에서 결정된 날짜를 그대로 전달
         .assigneeId(assignee != null ? assignee.getId() : null)
         .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
         .isRandom(todo.getIsRandom())
