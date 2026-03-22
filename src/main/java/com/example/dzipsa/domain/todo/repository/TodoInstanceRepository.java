@@ -3,6 +3,7 @@ package com.example.dzipsa.domain.todo.repository;
 import com.example.dzipsa.domain.todo.entity.Todo;
 import com.example.dzipsa.domain.todo.entity.TodoInstance;
 import com.example.dzipsa.domain.todo.entity.enums.TodoStatus;
+import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -119,6 +120,12 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       @Param("userId") Long userId,
       @Param("today") LocalDate today,
       @Param("status") TodoStatus status);
+
+  /**
+   * 특정 할 일의 특정 날짜(targetDate)에 해당하는 인스턴스를 조회
+   * 할 일 등록/수정 직후 응답에 오늘 날짜의 instanceId를 포함하기 위해 사용됨
+   */
+  Optional<TodoInstance> findByTodoIdAndTargetDate(Long todoId, LocalDate targetDate);
 
   // 배치/로직용 유틸리티 메서드
   boolean existsByTodoIdAndTargetDate(Long todoId, LocalDate targetDate);
