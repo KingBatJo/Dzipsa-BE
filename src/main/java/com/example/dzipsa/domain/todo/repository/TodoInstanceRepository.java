@@ -93,16 +93,17 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
   List<TodoInstance> findAllByRoomIdAndStatusNot(Long roomId, TodoStatus status);
 
   /**
-   * [특정 구성원의 할 일]
-   * 특정 유저 + 오늘까지의 할 일 + 마감일 빠른 순
+   * [특정 구성원의 모든 할 일 조회]
+   * 특정 유저 + 상태가 미완료(PENDING)인 건들을
+   * 마감일 빠른 순(지연 -> 오늘 -> 예정)으로 전체 조회
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId " +
-      "AND ti.actualAssignee.id = :userId AND ti.targetDate <= :today " +
+      "AND ti.actualAssignee.id = :userId " +
+      "AND ti.status = 'PENDING' " + // 완료된 건은 제외하고 해야 할 일만!
       "ORDER BY ti.targetDate ASC")
   List<TodoInstance> findMemberTodos(
       @Param("roomId") Long roomId,
-      @Param("userId") Long userId,
-      @Param("today") LocalDate today);
+      @Param("userId") Long userId);
 
   /**
    * [내 놓친 할 일 카운트]
