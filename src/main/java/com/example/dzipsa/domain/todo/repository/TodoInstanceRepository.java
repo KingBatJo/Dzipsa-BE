@@ -1,5 +1,6 @@
 package com.example.dzipsa.domain.todo.repository;
 
+import com.example.dzipsa.domain.todo.entity.Todo;
 import com.example.dzipsa.domain.todo.entity.TodoInstance;
 import com.example.dzipsa.domain.todo.entity.enums.TodoStatus;
 import org.springframework.data.domain.Pageable;
@@ -118,6 +119,8 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
 
   // 배치/로직용 유틸리티 메서드
   boolean existsByTodoIdAndTargetDate(Long todoId, LocalDate targetDate);
+  long countByTargetDateBeforeAndStatus(LocalDate date, TodoStatus status);
+  boolean existsByTodoAndTargetDate(Todo todo, LocalDate date);
 
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId AND ti.status = :status ORDER BY ti.createdAt DESC")
   Slice<TodoInstance> findCompletedTodos(@Param("roomId") Long roomId, @Param("status") TodoStatus status, Pageable pageable);
