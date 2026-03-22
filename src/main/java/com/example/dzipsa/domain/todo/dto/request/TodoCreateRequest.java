@@ -2,31 +2,29 @@ package com.example.dzipsa.domain.todo.dto.request;
 
 import com.example.dzipsa.domain.todo.entity.enums.RecurringType;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import java.time.LocalDate;
 
 @Getter
 public class TodoCreateRequest {
-  @NotBlank(message = "제목은 필수입니다.")
-  @Size(max = 30)
+  @NotBlank(message = "할 일을 입력하세요")
+  @Size(max = 30, message = "제목은 30자 이내로 입력해주세요.")
   private String title;
 
-  @Size(max = 300)
-  private String memo;
+  // 1. 반복 OFF 시: 사용자가 직접 선택하는 날짜
+  private LocalDate targetDate;
 
-  private Long assigneeId; // 미기입 시 작성자 본인
+  // 2. 반복 ON 시: 시스템이 자동 계산
+  private RecurringType recurringType; // NONE, WEEKLY, MONTHLY
+  private String repeatDays;           // 요일(1~7) 또는 일자(1~31)
+  private LocalDate startDate;         // 반복 시작일
+  private LocalDate endDate;           // 반복 종료일 (없음 가능)
 
+  // 공통 항목
+  private Long assigneeId;
   private Boolean isRandom;
 
-  @NotNull(message = "반복 설정을 선택해주세요.")
-  private RecurringType recurringType;
-
-  private String repeatDays; // "0,2,4"
-
-  @NotNull(message = "시작 날짜를 선택해주세요.")
-  private LocalDate startDate;
-
-  private LocalDate endDate;
+  @Size(max = 300, message = "메모는 300자 이내로 입력해주세요.")
+  private String memo;
 }
