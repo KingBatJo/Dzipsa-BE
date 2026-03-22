@@ -73,6 +73,11 @@ public class TodoServiceImpl implements TodoService {
         .orElseThrow(() -> new EntityNotFoundException("지정된 담당자를 찾을 수 없습니다."))
         : user;
 
+    // 반복 여부에 따른 시작 날짜 결정 (NONE이면 targetDate가 곧 시작일)
+    LocalDate finalStartDate = (request.getRecurringType() == RecurringType.NONE)
+        ? request.getTargetDate()
+        : request.getStartDate();
+
     Todo todo = Todo.builder()
         .room(myRoom)
         .writer(user)
@@ -80,7 +85,7 @@ public class TodoServiceImpl implements TodoService {
         .title(request.getTitle())
         .memo(request.getMemo())
         .isRandom(request.getIsRandom())
-        .startDate(request.getStartDate())
+        .startDate(finalStartDate)
         .endDate(request.getEndDate())
         .recurringType(request.getRecurringType())
         .repeatDays(request.getRepeatDays())
@@ -92,19 +97,26 @@ public class TodoServiceImpl implements TodoService {
     TodoInstance representInstance = null;
 
     if (todo.getRecurringType() == RecurringType.NONE) {
-      // 반복 없음: 생성된 단일 인스턴스를 바로 할당
-      representInstance = saveInstance(todo, myRoom, targetAssignee, todo.getStartDate());
+      // 반복 없음: 생성된 단일 인스턴스를 바로 할당 (사용자가 입력한 targetDate 기준)
+      representInstance = saveInstance(todo, myRoom, targetAssignee, request.getTargetDate());
     } else {
-      // 반복 설정: 14일치 생성 후, 그중 '오늘' 날짜인 것이 있다면 응답에 포함
+      // 반복 설정: 14일치 생성 후 그중 오늘 날짜인 것이 있다면 응답에 포함
       todoBatchService.generateInstancesRange(todo, todo.getStartDate(), todo.getStartDate().plusDays(14));
 
-      // 오늘 날짜의 인스턴스가 생성되었는지 확인 (방금 생성한 것 중 오늘 날짜 조회)
-      representInstance = todoInstanceRepository.findByTodoIdAndTargetDate(todo.getId(), LocalDate.now())
+      // 생성된 여러 인스턴스 중 날짜가 가장 빠른(가까운) 것을 하나 가져오기
+      representInstance = todoInstanceRepository.findAllByTodoIdAndTargetDateAfter(todo.getId(), LocalDate.now().minusDays(1))
+          .stream()
+          .min(Comparator.comparing(TodoInstance::getTargetDate))
           .orElse(null);
     }
 
-    // 3. 추출한 인스턴스를 컨버터에 전달 (이제 null이 아니게 됩니다!)
-    return TodoConverter.toCreateResponse(todo, representInstance);
+    // 응답용 targetDate 직접 계산 (로직 분리)
+    LocalDate responseTargetDate = (representInstance != null)
+        ? representInstance.getTargetDate()
+        : calculateFirstRecurringDate(todo);
+
+    // 3. 추출한 인스턴스를 컨버터에 전달
+    return TodoConverter.toCreateResponse(todo, representInstance, responseTargetDate);
   }
 
   /**
@@ -124,6 +136,11 @@ public class TodoServiceImpl implements TodoService {
         .orElseThrow(() -> new EntityNotFoundException("지정된 담당자를 찾을 수 없습니다."))
         : todo.getDefaultAssignee();
 
+    // 수정 시 반복 여부에 따른 시작 날짜 재결정
+    LocalDate finalStartDate = (request.getRecurringType() == RecurringType.NONE)
+        ? request.getTargetDate()
+        : request.getStartDate();
+
     // 3. Todo 마스터 정보 업데이트
     todo.update(
         request.getTitle(),
@@ -132,19 +149,32 @@ public class TodoServiceImpl implements TodoService {
         request.getIsRandom(),
         request.getRecurringType(),
         request.getRepeatDays(),
-        request.getStartDate(),
+        finalStartDate,
         request.getEndDate()
     );
 
-    // 4. 요일이나 규칙이 바뀌었을 수 있으므로 배치 서비스를 호출해 인스턴스들을 재정비
-    // 오늘부터 향후 14일간의 데이터를 수정된 규칙에 맞게 생성/갱신
-    todoBatchService.generateInstancesRange(todo, LocalDate.now(), LocalDate.now().plusDays(14));
+    // 기존 미래 인스턴스(오늘 포함) 정리 후 재생성
+    todoInstanceRepository.deleteFutureInstances(todo.getId(), LocalDate.now());
 
-    // 5. 수정한 직후 '오늘' 수행해야 할 인스턴스가 있는지 다시 조회
+    // 4. 요일이나 규칙이 바뀌었을 수 있으므로 배치 서비스를 호출해 인스턴스들을 재정비
+    if (todo.getRecurringType() == RecurringType.NONE) {
+      // 반복 없음: 수정된 targetDate에 단일 생성
+      saveInstance(todo, todo.getRoom(), newAssignee, request.getTargetDate());
+    } else {
+      // 오늘부터 향후 14일간의 데이터를 수정된 규칙에 맞게 생성/갱신
+      todoBatchService.generateInstancesRange(todo, LocalDate.now(), LocalDate.now().plusDays(14));
+    }
+
+    // 5. 수정한 직후 오늘 수행해야 할 인스턴스가 있는지 다시 조회
     TodoInstance representInstance = todoInstanceRepository.findByTodoIdAndTargetDate(todo.getId(), LocalDate.now())
         .orElse(null);
 
-    return TodoConverter.toCreateResponse(todo, representInstance);
+    // 응답용 targetDate 직접 계산 (로직 분리)
+    LocalDate responseTargetDate = (representInstance != null)
+        ? representInstance.getTargetDate()
+        : calculateFirstRecurringDate(todo);
+
+    return TodoConverter.toCreateResponse(todo, representInstance, responseTargetDate);
   }
 
   /**
@@ -243,7 +273,7 @@ public class TodoServiceImpl implements TodoService {
 
   /**
    * [우리 집 할 일 - 지연된 할 일]
-   * 리팩토링: 상태값이 DELAYED인 것을 찾는 게 아니라, 오늘 이전 날짜이면서 PENDING인 것을 조회
+   * 오늘 이전 날짜이면서 PENDING인 것을 조회
    */
   @Override
   public List<TodoSummaryResponse> getRoomDelayedTodo(Long userId) {
@@ -384,6 +414,10 @@ public class TodoServiceImpl implements TodoService {
 
   // --- 헬퍼 메서드 ---
 
+  /**
+   * [할 일 인스턴스 생성 및 저장]
+   * 마스터(Todo) 설정에 따라 실제 수행할 날짜별 인스턴스를 생성함
+   */
   private TodoInstance saveInstance(Todo todo, Room room, User assignee, LocalDate date) {
     TodoInstance instance = TodoInstance.builder()
         .todo(todo)
@@ -397,14 +431,20 @@ public class TodoServiceImpl implements TodoService {
     return todoInstanceRepository.save(instance);
   }
 
+  /**
+   * [놓친 할 일 목록 페이징 조회]
+   * 오늘 이전 날짜 중 완료되지 않은 항목을 커서 기반으로 조회
+   */
   private Slice<TodoInstance> fetchMissedTodos(Long userId, LocalDate today, String cursor, Pageable pageable) {
     LocalDate cursorDate;
     Long cursorId;
 
+    // 첫 페이지 호출 시 (커서 없음) 가장 먼 미래 날짜와 최대 ID로 초기값 설정
     if (cursor == null || cursor.isBlank()) {
       cursorDate = LocalDate.of(9999, 12, 31);
       cursorId = Long.MAX_VALUE;
     } else {
+      // 커서 파싱 (날짜_ID 형태)
       String[] parts = cursor.split("_");
       cursorDate = LocalDate.parse(parts[0]);
       cursorId = Long.parseLong(parts[1]);
@@ -412,6 +452,10 @@ public class TodoServiceImpl implements TodoService {
     return todoInstanceRepository.findMissedTodosWithCursor(userId, today, cursorDate, cursorId, pageable);
   }
 
+  /**
+   * [오늘의 할 일 목록 페이징 조회]
+   * 오늘 날짜에 배정된 할 일을 ID 기반 커서로 조회
+   */
   private Slice<TodoInstance> fetchTodayTodos(Long userId, LocalDate today, String cursor, Pageable pageable) {
     Long cursorId = 0L;
     if (cursor != null && !cursor.isBlank()) {
@@ -420,6 +464,10 @@ public class TodoServiceImpl implements TodoService {
     return todoInstanceRepository.findTodayTodosWithCursor(userId, today, cursorId, pageable);
   }
 
+  /**
+   * [예정된 할 일 목록 페이징 조회]
+   * 내일부터 발생할 할 일들을 날짜 및 ID 커서 기반으로 조회
+   */
   private Slice<TodoInstance> fetchUpcomingTodos(Long userId, LocalDate today, String cursor, Pageable pageable) {
     LocalDate cursorDate = today.plusDays(1);
     Long cursorId;
@@ -435,13 +483,54 @@ public class TodoServiceImpl implements TodoService {
     return todoInstanceRepository.findUpcomingTodosWithCursor(userId, today, cursorDate, cursorId, pageable);
   }
 
+  /**
+   * [활성 룸 멤버 조회]
+   * 사용자가 현재 소속되어 있는 집(Room)의 멤버 정보를 가져옴 (탈퇴 제외)
+   */
   private RoomMember getActiveRoomMember(Long userId) {
     return roomMemberRepository.findByUserIdAndLeftAtIsNull(userId)
         .orElseThrow(() -> new BusinessException(RoomErrorCode.ROOM_NOT_FOUND));
   }
 
+  /**
+   * [유효한 룸 조회]
+   * 삭제되지 않은 방(Room) 정보를 ID로 조회
+   */
   private Room findRoomById(Long roomId) {
     return roomRepository.findByIdAndDeletedAtIsNull(roomId)
         .orElseThrow(() -> new BusinessException(RoomErrorCode.ROOM_NOT_FOUND));
+  }
+
+  /**
+   * 반복 규칙을 분석하여 가장 가까운 미래의 마감일을 계산
+   */
+  private LocalDate calculateFirstRecurringDate(Todo todo) {
+    LocalDate start = todo.getStartDate();
+    RecurringType type = todo.getRecurringType();
+    String days = todo.getRepeatDays();
+
+    if (type == RecurringType.NONE || days == null || days.isBlank()) {
+      return start;
+    }
+
+    if (type == RecurringType.MONTHLY) {
+      try {
+        int dayOfMonth = Integer.parseInt(days.trim());
+        // 시작일의 날짜를 설정된 날짜로 맞춤
+        LocalDate firstDate = start.withDayOfMonth(Math.min(dayOfMonth, start.lengthOfMonth()));
+        // 만약 맞춘 날짜가 시작일보다 전이면 다음 달로 넘김
+        if (firstDate.isBefore(start)) {
+          firstDate = firstDate.plusMonths(1);
+          // 다음 달에도 해당 날짜가 존재하는지 확인 (예: 31일 설정 시 2월 처리)
+          firstDate = firstDate.withDayOfMonth(Math.min(dayOfMonth, firstDate.lengthOfMonth()));
+        }
+        return firstDate;
+      } catch (NumberFormatException e) {
+        return start;
+      }
+    }
+
+    // 주간 반복 등 다른 케이스는 일단 시작일 반환
+    return start;
   }
 }
