@@ -10,6 +10,7 @@ import java.time.LocalDate;
 public class TodoSummaryResponse {
   private Long instanceId;
   private String title;
+  private Long assigneeId;
   private String assigneeNickname;
   private String profileImageUrl;
   private TodoStatus status;
