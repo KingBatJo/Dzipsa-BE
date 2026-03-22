@@ -12,7 +12,8 @@ public class TodoCreateResponse {
   private Long instanceId;
   private String title;
   private String memo;
-  private Long defaultAssigneeId;
+  private Long assigneeId;
+  private String assigneeNickname;
   private Boolean isRandom;
   private RecurringType recurringType;
   private String repeatDays;
