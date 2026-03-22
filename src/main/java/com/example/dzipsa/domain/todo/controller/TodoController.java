@@ -6,6 +6,7 @@ import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
+import com.example.dzipsa.domain.todo.service.TodoBatchService;
 import com.example.dzipsa.domain.todo.service.TodoService;
 import com.example.dzipsa.domain.user.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -27,9 +28,10 @@ import java.util.List;
 public class TodoController {
 
   private final TodoService todoService;
+  private final TodoBatchService todoBatchService;
 
   /**
-   * [할 일 신규 등록]
+   * [할 일 등록]
    * URL: POST /api/todos
    * @param request 제목, 메모, 반복 설정 등 상세 정보
    */
@@ -42,9 +44,9 @@ public class TodoController {
   }
 
   /**
-   * [할 일 원본 설정 수정 및 미래 담당자 전파]
+   * [할 일 수정]
    * URL: PUT /api/todos/{todoId}
-   * 마스터 정보를 수정하며, 오늘 이후 예정된 미완료 인스턴스들에 변경 사항을 반영
+   * 마스터 정보를 수정하며, 오늘 이후 예정된 미완료 인스턴스들에 변경사항을 반영
    */
   @PutMapping("/{todoId}")
   public ResponseEntity<TodoCreateResponse> updateTodo(
@@ -65,7 +67,8 @@ public class TodoController {
       @RequestParam(required = false) String missedCursor,
       @RequestParam(required = false) String todayCursor,
       @RequestParam(required = false) String upcomingCursor) {
-    MyTodoListResponse response = todoService.getMyTodoList(user.getId(), missedCursor, todayCursor, upcomingCursor);
+    MyTodoListResponse response = todoService.getMyTodoList(user.getId(), missedCursor, todayCursor,
+        upcomingCursor);
     return ResponseEntity.ok(response);
   }
 
@@ -107,8 +110,7 @@ public class TodoController {
 
   /**
    * [우리집 할 일 - 오늘 할 일 전체 현황 조회]
-   * URL: GET /api/todos/room/today
-   * 방 멤버 전체의 오늘 할 일 목록을 생성순으로 조회
+   * URL: GET /api/todos/room/today 방 멤버 전체의 오늘 할 일 목록을 생성순으로 조회
    */
   @GetMapping("/room/today")
   public ResponseEntity<List<TodoSummaryResponse>> getRoomTodayTodo(
@@ -186,18 +188,4 @@ public class TodoController {
     todoService.completeTodo(user.getId(), instanceId, image);
     return ResponseEntity.ok().build();
   }
-
-  /**
-   * [배치 수동 실행 테스트용]
-   * URL: POST /api/todos/test/batch
-   * 주의: 테스트 완료 후 삭제하거나 주석처리
-
-  @PostMapping("/test/batch")
-  public ResponseEntity<String> testBatch() {
-    log.info("===== 수동 배치 실행 시작 =====");
-    todoService.generateRecurringTodos();
-    log.info("===== 수동 배치 실행 완료 =====");
-    return ResponseEntity.ok("Batch executed successfully");
-  }
-  */
 }
