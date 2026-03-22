@@ -6,6 +6,7 @@ import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
+import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.user.entity.User;
 import java.util.List;
@@ -54,4 +55,10 @@ public interface TodoService {
 
   // 할 일 인증샷 삭제
   void deleteTodoImage(Long userId, Long instanceId);
+
+  // 할 일 상세 조회
+  TodoDetailResponse getTodoDetail(Long userId, Long instanceId);
+
+  // 할 일 상태 되돌리기 (완료 -> 진행 중)
+  void resetTodoStatus(Long userId, Long instanceId);
 }
