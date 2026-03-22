@@ -8,6 +8,8 @@ import lombok.Getter;
 public class TodoCompletedResponse {
   private Long instanceId;
   private String title;
+  private String assigneeNickname;
+  private String profileImageUrl;
   private String imageUrl;
   private String completedAt;
 }
