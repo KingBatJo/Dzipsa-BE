@@ -6,6 +6,7 @@ import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
+import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.todo.service.TodoBatchService;
 import com.example.dzipsa.domain.todo.service.TodoService;
@@ -18,7 +19,6 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.http.MediaType;
-import java.io.IOException;
 
 import java.util.List;
 
@@ -199,6 +199,32 @@ public class TodoController {
       @RequestPart(value = "image", required = false) MultipartFile image // 선택 사항으로 변경
   ) {
     todoService.completeTodo(user.getId(), instanceId, image);
+    return ResponseEntity.ok().build();
+  }
+
+  /**
+   * [할 일 상세 조회]
+   */
+  @GetMapping("/instances/{instanceId}")
+  public ResponseEntity<TodoDetailResponse> getTodoDetail(
+      @AuthenticationPrincipal User user,
+      @PathVariable Long instanceId) {
+
+    // 서비스 호출 시 현재 로그인한 사용자의 ID를 함께 넘겨 '본인 여부(isOwner)'를 판단함
+    TodoDetailResponse response = todoService.getTodoDetail(user.getId(), instanceId);
+    return ResponseEntity.ok(response);
+  }
+
+  /**
+   * [할 일 상태 초기화: 완료 -> 진행 중으로 변경]
+   */
+  @PatchMapping("/instances/{instanceId}/reset")
+  public ResponseEntity<Void> resetTodoStatus(
+      @AuthenticationPrincipal User user,
+      @PathVariable Long instanceId) {
+
+    // 본인의 할 일만 상태를 되돌릴 수 있도록 처리함
+    todoService.resetTodoStatus(user.getId(), instanceId);
     return ResponseEntity.ok().build();
   }
 }
