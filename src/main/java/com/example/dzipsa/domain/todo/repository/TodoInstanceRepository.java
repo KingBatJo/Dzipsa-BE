@@ -15,14 +15,14 @@ import java.util.List;
 public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long> {
 
   /**
-   * [지연된 할 일 - 무한 스크롤]
+   * [나의 할 일 - 지연된 할 일 - 무한 스크롤]
    * 날짜와 ID를 조합한 복합 커서를 사용하여 데이터 누락을 방지
-   * 정렬: 최신 날짜순 (DESC)
+   * 정렬: 오래된 날짜순 (ASC)
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.actualAssignee.id = :userId " +
       "AND ti.status != 'COMPLETED' AND ti.targetDate < :today " +
       "AND (ti.targetDate < :cursorDate OR (ti.targetDate = :cursorDate AND ti.id < :cursorId)) " +
-      "ORDER BY ti.targetDate DESC, ti.id DESC")
+      "ORDER BY ti.targetDate ASC, ti.id ASC")
   Slice<TodoInstance> findMissedTodosWithCursor(
       @Param("userId") Long userId,
       @Param("today") LocalDate today,
@@ -31,7 +31,7 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       Pageable pageable);
 
   /**
-   * [오늘의 할 일 - 무한 스크롤]
+   * [나의 할 일 - 오늘의 할 일 - 무한 스크롤]
    * 정렬: 등록 순서 (ASC)
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.actualAssignee.id = :userId " +
@@ -45,7 +45,7 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       Pageable pageable);
 
   /**
-   * [예정된 할 일 - 무한 스크롤]
+   * [나의 할 일 - 예정된 할 일 - 무한 스크롤]
    * 정렬: 가까운 미래 순 (ASC)
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.actualAssignee.id = :userId " +
@@ -60,7 +60,7 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       Pageable pageable);
 
   /**
-   * [우리집 오늘 할 일]
+   * [우리집 할 일 - 오늘 할 일]
    * 상태 순(PENDING 우선) -> 생성일 순 정렬
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId AND ti.targetDate = :today " +
@@ -70,7 +70,7 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       @Param("today") LocalDate today);
 
   /**
-   * [우리집 지연된 할 일]
+   * [우리집 할 일 - 지연된 할 일]
    * 오늘 이전 날짜 + 미완료 + 오래된 날짜순(D+5, D+3...)
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId " +
@@ -82,15 +82,18 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       @Param("status") TodoStatus status);
 
   /**
-   * [우리집 모든 할 일]
-   * 오늘 포함 과거의 모든 데이터를 최신 날짜순으로
+   * [우리집 할 일 - 모든 할 일]
+   * 정렬 1순위 마감일, 2순위 생성일 오름차순
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId " +
       "AND ti.targetDate <= :today " +
-      "ORDER BY ti.targetDate DESC")
+      "ORDER BY ti.targetDate ASC, ti.createdAt ASC")
   List<TodoInstance> findRoomAllTodos(
       @Param("roomId") Long roomId,
-      @Param("today") LocalDate today);
+      @Param("today") LocalDate today
+  );
+
+  // 상태가 특정값이 아닌 모든 건 조회
   List<TodoInstance> findAllByRoomIdAndStatusNot(Long roomId, TodoStatus status);
 
   /**
