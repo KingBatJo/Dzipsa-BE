@@ -11,6 +11,7 @@ import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.todo.service.TodoBatchService;
 import com.example.dzipsa.domain.todo.service.TodoService;
 import com.example.dzipsa.domain.user.entity.User;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Slice;
@@ -39,7 +40,7 @@ public class TodoController {
   @PostMapping
   public ResponseEntity<TodoCreateResponse> createTodo(
       @AuthenticationPrincipal User user,
-      @RequestBody TodoCreateRequest request) {
+      @Valid @RequestBody TodoCreateRequest request) {
     TodoCreateResponse response = todoService.createTodo(user, request);
     return ResponseEntity.ok(response);
   }
@@ -53,7 +54,7 @@ public class TodoController {
   public ResponseEntity<TodoCreateResponse> updateTodo(
       @AuthenticationPrincipal User user,
       @PathVariable Long todoId,
-      @RequestBody TodoUpdateRequest request) {
+      @Valid @RequestBody TodoUpdateRequest request) {
     return ResponseEntity.ok(todoService.updateTodo(user.getId(), todoId, request));
   }
 
