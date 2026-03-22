@@ -24,8 +24,8 @@ import com.example.dzipsa.domain.user.entity.User;
 import com.example.dzipsa.domain.user.repository.UserRepository;
 import com.example.dzipsa.global.exception.BusinessException;
 import com.example.dzipsa.global.exception.domain.RoomErrorCode;
+import com.example.dzipsa.global.exception.domain.TodoErrorCode;
 import com.example.dzipsa.global.util.S3Uploader;
-import jakarta.persistence.EntityNotFoundException;
 import java.io.IOException;
 import java.util.Comparator;
 import lombok.RequiredArgsConstructor;
@@ -33,7 +33,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
-import org.springframework.security.access.AccessDeniedException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -54,7 +53,7 @@ public class TodoServiceImpl implements TodoService {
   private final RoomRepository roomRepository;
   private final S3Uploader s3Uploader;
   private final RoomMemberRepository roomMemberRepository;
-  private final TodoBatchService todoBatchService; // 1. 배치 서비스 주입 추가
+  private final TodoBatchService todoBatchService;
 
   /**
    * [할 일 신규 등록]
@@ -64,13 +63,17 @@ public class TodoServiceImpl implements TodoService {
   @Override
   @Transactional
   public TodoCreateResponse createTodo(User user, TodoCreateRequest request) {
+
+    // 날짜 유효성 검증 (시작일이 종료일보다 늦으면 예외 발생)
+    validateTodoDates(request.getStartDate(), request.getEndDate());
+
     // 1. 기본 설정 및 Todo 저장 (기존 코드 동일)
     RoomMember myMember = getActiveRoomMember(user.getId());
     Room myRoom = findRoomById(myMember.getRoomId());
 
     User targetAssignee = (request.getAssigneeId() != null)
         ? userRepository.findById(request.getAssigneeId())
-        .orElseThrow(() -> new EntityNotFoundException("지정된 담당자를 찾을 수 없습니다."))
+        .orElseThrow(() -> new BusinessException(TodoErrorCode.ASSIGNEE_NOT_FOUND))
         : user;
 
     // 반복 여부에 따른 시작 날짜 결정 (NONE이면 targetDate가 곧 시작일)
@@ -126,14 +129,18 @@ public class TodoServiceImpl implements TodoService {
   @Override
   @Transactional
   public TodoCreateResponse updateTodo(Long userId, Long todoId, TodoUpdateRequest request) {
+
+    // 날짜 유효성 검증 (시작일이 종료일보다 늦으면 예외 발생)
+    validateTodoDates(request.getStartDate(), request.getEndDate());
+
     // 1. 마스터 데이터 조회
     Todo todo = todoRepository.findById(todoId)
-        .orElseThrow(() -> new EntityNotFoundException("수정할 데이터를 찾을 수 없습니다."));
+        .orElseThrow(() -> new BusinessException(TodoErrorCode.TODO_NOT_FOUND));
 
     // 2. 담당자 확인
     User newAssignee = (request.getAssigneeId() != null)
         ? userRepository.findById(request.getAssigneeId())
-        .orElseThrow(() -> new EntityNotFoundException("지정된 담당자를 찾을 수 없습니다."))
+        .orElseThrow(() -> new BusinessException(TodoErrorCode.ASSIGNEE_NOT_FOUND))
         : todo.getDefaultAssignee();
 
     // 수정 시 반복 여부에 따른 시작 날짜 재결정
@@ -329,10 +336,10 @@ public class TodoServiceImpl implements TodoService {
   @Transactional
   public void completeTodo(Long userId, Long instanceId, MultipartFile image) {
     TodoInstance instance = todoInstanceRepository.findById(instanceId)
-        .orElseThrow(() -> new EntityNotFoundException("해당 할 일 일정을 찾을 수 없습니다."));
+        .orElseThrow(() -> new BusinessException(TodoErrorCode.TODO_INSTANCE_NOT_FOUND));
 
     if (instance.getActualAssignee().getId().longValue() != userId.longValue()) {
-      throw new AccessDeniedException("본인에게 할당된 할 일만 완료할 수 있습니다.");
+      throw new BusinessException(TodoErrorCode.FORBIDDEN_UPDATE_LIMIT);
     }
 
     String newImageUrl = instance.getImageUrl();
@@ -344,7 +351,7 @@ public class TodoServiceImpl implements TodoService {
         }
         newImageUrl = s3Uploader.upload(image, "todo");
       } catch (IOException e) {
-        throw new RuntimeException("이미지 업로드 중 서버 오류가 발생했습니다.");
+        throw new BusinessException(TodoErrorCode.IMAGE_UPLOAD_FAILED);
       }
     }
 
@@ -358,10 +365,10 @@ public class TodoServiceImpl implements TodoService {
   @Transactional
   public void deleteTodoImage(Long userId, Long instanceId) {
     TodoInstance instance = todoInstanceRepository.findById(instanceId)
-        .orElseThrow(() -> new EntityNotFoundException("해당 할 일 일정을 찾을 수 없습니다."));
+        .orElseThrow(() -> new BusinessException(TodoErrorCode.TODO_INSTANCE_NOT_FOUND));
 
     if (!instance.getActualAssignee().getId().equals(userId)) {
-      throw new AccessDeniedException("본인의 인증샷만 삭제할 수 있습니다.");
+      throw new BusinessException(TodoErrorCode.FORBIDDEN_IMAGE_DELETE);
     }
 
     if (instance.getImageUrl() != null) {
@@ -382,7 +389,7 @@ public class TodoServiceImpl implements TodoService {
   public TodoDetailResponse getTodoDetail(Long userId, Long instanceId) {
     // 1. DB에서 해당 Instance 존재 여부 확인
     TodoInstance instance = todoInstanceRepository.findById(instanceId)
-        .orElseThrow(() -> new EntityNotFoundException("해당 할 일 일정을 찾을 수 없습니다. ID: " + instanceId));
+        .orElseThrow(() -> new BusinessException(TodoErrorCode.TODO_INSTANCE_NOT_FOUND));
 
     // 2. Converter를 통해 엔티티를 응답 DTO로 변환
     // (상태값 계산 및 반복 주기 한글화 로직은 Converter 내부에서 수행)
@@ -399,12 +406,12 @@ public class TodoServiceImpl implements TodoService {
   public void resetTodoStatus(Long userId, Long instanceId) {
     // 1. 해당 Instance 데이터 조회
     TodoInstance instance = todoInstanceRepository.findById(instanceId)
-        .orElseThrow(() -> new EntityNotFoundException("해당 할 일 일정을 찾을 수 없습니다. ID: " + instanceId));
+        .orElseThrow(() -> new BusinessException(TodoErrorCode.TODO_INSTANCE_NOT_FOUND));
 
     // 2. 권한 검증: 현재 할 일의 실제 담당자(Assignee)와 요청한 사용자가 일치하는지 확인
     // (본인의 할 일만 상태를 '진행 중'으로 되돌릴 수 있음)
     if (!instance.getActualAssignee().getId().equals(userId)) {
-      throw new AccessDeniedException("본인의 할 일만 상태를 변경할 수 있습니다.");
+      throw new BusinessException(TodoErrorCode.FORBIDDEN_UPDATE_LIMIT);
     }
 
     // 3. 엔티티 상태 변경
@@ -499,6 +506,15 @@ public class TodoServiceImpl implements TodoService {
   private Room findRoomById(Long roomId) {
     return roomRepository.findByIdAndDeletedAtIsNull(roomId)
         .orElseThrow(() -> new BusinessException(RoomErrorCode.ROOM_NOT_FOUND));
+  }
+
+  /**
+   * 시작일과 종료일의 논리적 타당성 검증
+   */
+  private void validateTodoDates(LocalDate start, LocalDate end) {
+    if (end != null && start.isAfter(end)) {
+      throw new BusinessException(TodoErrorCode.INVALID_DATE_RANGE);
+    }
   }
 
   /**
