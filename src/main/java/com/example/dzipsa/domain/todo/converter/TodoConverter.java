@@ -24,9 +24,12 @@ public class TodoConverter {
 
   // 완료된 할 일 DTO 변환 (인증샷 포함 리스트용)
   public static TodoCompletedResponse toCompletedDTO(TodoInstance instance) {
+    User assignee = instance.getActualAssignee();
     return TodoCompletedResponse.builder()
         .instanceId(instance.getId())
         .title(instance.getTodo().getTitle())
+        .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
+        .profileImageUrl(assignee != null ? assignee.getProfileImageUrl() : null)
         .imageUrl(instance.getImageUrl())
         .completedAt(instance.getCompletedAt() != null
             ? instance.getCompletedAt().format(DateTimeFormatter.ofPattern("a hh:mm"))
@@ -41,8 +44,9 @@ public class TodoConverter {
     return TodoSummaryResponse.builder()
         .instanceId(instance.getId())
         .title(instance.getTodo().getTitle())
+        .assigneeId(assignee != null ? assignee.getId() : null)
         .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
-        .profileImageUrl(assignee.getProfileImageUrl())
+        .profileImageUrl(assignee != null ? assignee.getProfileImageUrl() : null)
         .status(instance.getStatus())
         .targetDate(instance.getTargetDate())
         .delayDays(calculateDelay(instance.getTargetDate(), instance.getStatus()))
@@ -78,12 +82,14 @@ public class TodoConverter {
   }
 
   public static TodoCreateResponse toCreateResponse(Todo todo, TodoInstance instance) {
+    User assignee = (instance != null) ? instance.getActualAssignee() : todo.getDefaultAssignee();
     return TodoCreateResponse.builder()
         .todoId(todo.getId())
         .instanceId(instance != null ? instance.getId() : null)
         .title(todo.getTitle())
         .memo(todo.getMemo())
-        .defaultAssigneeId(todo.getDefaultAssignee() != null ? todo.getDefaultAssignee().getId() : null)
+        .assigneeId(todo.getDefaultAssignee() != null ? todo.getDefaultAssignee().getId() : null)
+        .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
         .isRandom(todo.getIsRandom())
         .recurringType(todo.getRecurringType())
         .repeatDays(todo.getRepeatDays())
