@@ -3,6 +3,7 @@ package com.example.dzipsa.domain.todo.controller;
 import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
+import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
@@ -126,10 +127,9 @@ public class TodoController {
    * 방 멤버 전체의 오늘 할 일 목록을 생성순으로 조회
    */
   @GetMapping("/room/today")
-  public ResponseEntity<List<TodoSummaryResponse>> getRoomTodayTodo(
+  public ResponseEntity<RoomTodoResponse> getRoomTodoList(
       @AuthenticationPrincipal User user) {
-    List<TodoSummaryResponse> response = todoService.getRoomTodoList(user.getId());
-    return ResponseEntity.ok(response);
+    return ResponseEntity.ok(todoService.getRoomTodoList(user.getId()));
   }
 
   /**
