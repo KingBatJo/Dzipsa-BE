@@ -6,6 +6,8 @@ import com.example.dzipsa.domain.todo.entity.enums.RecurringType;
 import com.example.dzipsa.domain.todo.entity.enums.TodoStatus;
 import com.example.dzipsa.domain.todo.repository.TodoInstanceRepository;
 import com.example.dzipsa.domain.todo.repository.TodoRepository;
+import com.example.dzipsa.global.exception.BusinessException;
+import com.example.dzipsa.global.exception.domain.TodoErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -45,7 +47,13 @@ public class TodoBatchService {
     int createdCount = 0;
 
     for (Todo todo : activeTodos) {
-      createdCount += generateInstancesRange(todo, today, maxDate);
+      try {
+        createdCount += generateInstancesRange(todo, today, maxDate);
+      } catch (BusinessException e) {
+        // 배치 처리 중 특정 Todo의 설정 오류가 발견되어도 멈추지 않고 로그만 남긴 후 다음으로 진행
+        log.error("[Batch Error] Todo ID: {} - 에러코드: {}, 메시지: {}",
+            todo.getId(), e.getCode().getCode(), e.getMessage());
+      }
     }
     log.info("[Batch] 생성 완료: 총 {}건", createdCount);
   }
@@ -55,6 +63,11 @@ public class TodoBatchService {
    * 서비스 레이어(생성 시점)와 배치 레이어에서 공통으로 사용
    */
   public int generateInstancesRange(Todo todo, LocalDate start, LocalDate end) {
+    // 날짜 범위 기본 검증
+    if (todo.getEndDate() != null && todo.getStartDate().isAfter(todo.getEndDate())) {
+      throw new BusinessException(TodoErrorCode.INVALID_DATE_RANGE);
+    }
+
     int count = 0;
     for (LocalDate targetDate = start; !targetDate.isAfter(end); targetDate = targetDate.plusDays(1)) {
       if (isInvalidDate(todo, targetDate)) continue;
@@ -118,13 +131,17 @@ public class TodoBatchService {
       return targetDate.equals(todo.getStartDate());
     }
 
+    // 주간/월간 반복인데 repeatDays가 없는 경우
+    if (todo.getRepeatDays() == null || todo.getRepeatDays().isBlank()) {
+      throw new BusinessException(TodoErrorCode.INVALID_RECURRING_PARS);
+    }
+
     if (type == RecurringType.WEEKLY) {
       int dayOfWeek = targetDate.getDayOfWeek().getValue();
-      return todo.getRepeatDays() != null && todo.getRepeatDays().contains(String.valueOf(dayOfWeek));
+      return todo.getRepeatDays().contains(String.valueOf(dayOfWeek));
     }
 
     if (type == RecurringType.MONTHLY) {
-      if (todo.getRepeatDays() == null) return false;
       return String.valueOf(targetDate.getDayOfMonth()).equals(todo.getRepeatDays());
     }
 
