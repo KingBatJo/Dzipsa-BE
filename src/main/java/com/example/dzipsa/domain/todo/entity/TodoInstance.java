@@ -87,4 +87,12 @@ public class TodoInstance {
   public void removeImage() {
     this.imageUrl = null;
   }
+
+  /**
+   * 할 일 상태를 '진행 중'으로 초기화
+   */
+  public void resetToPending() {
+    this.status = TodoStatus.PENDING; // 상태를 진행 중으로 변경
+    this.completedAt = null;          // 완료 일시 초기화
+  }
 }
