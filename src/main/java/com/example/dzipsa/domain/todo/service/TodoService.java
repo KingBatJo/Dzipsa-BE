@@ -40,14 +40,17 @@ public interface TodoService {
   List<TodoSummaryResponse> getRoomAllTodo(Long userId);
 
   // 특정 구성원의 할 일 조회
-  List<TodoSummaryResponse> getMemberTodo(Long roomId, Long userId);
+  List<TodoSummaryResponse> getMemberTodo(Long loginUserId, Long targetMemberId);
 
   // 내 놓친 할 일 카운트
   int getMissedTodoCount(Long userId);
 
   // 완료된 할 일
   Slice<TodoCompletedResponse> getCompletedTodos(Long userId, int page, int size);
+
+  // 할 일 완료 처리
   void completeTodo(Long userId, Long instanceId, MultipartFile image);
-  void generateRecurringTodos();
+
+  // 할 일 인증샷 삭제
   void deleteTodoImage(Long userId, Long instanceId);
 }
