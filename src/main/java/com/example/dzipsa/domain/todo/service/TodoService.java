@@ -3,6 +3,7 @@ package com.example.dzipsa.domain.todo.service;
 import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
+import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
@@ -31,7 +32,7 @@ public interface TodoService {
   MyTodoListResponse.PagedTodoResponse getUpcomingTodos(Long userId, String cursor);
 
   // 우리집 할 일 - 오늘 할 일
-  List<TodoSummaryResponse> getRoomTodoList(Long userId);
+  RoomTodoResponse getRoomTodoList(Long userId);
 
   // 우리집 할 일 - 지연된 할 일
   List<TodoSummaryResponse> getRoomDelayedTodo(Long userId);
