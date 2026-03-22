@@ -13,6 +13,7 @@ import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.todo.entity.Todo;
 import com.example.dzipsa.domain.todo.entity.TodoInstance;
+import com.example.dzipsa.domain.todo.entity.enums.RecurringType;
 import com.example.dzipsa.domain.todo.entity.enums.TodoStatus;
 import com.example.dzipsa.domain.todo.repository.TodoInstanceRepository;
 import com.example.dzipsa.domain.todo.repository.TodoRepository;
@@ -50,11 +51,12 @@ public class TodoServiceImpl implements TodoService {
   private final RoomRepository roomRepository;
   private final S3Uploader s3Uploader;
   private final RoomMemberRepository roomMemberRepository;
+  private final TodoBatchService todoBatchService; // 1. 배치 서비스 주입 추가
 
   /**
    * [할 일 신규 등록]
    * 1. 할 일의 메인 설정(마스터)을 저장
-   * 2. 사용자 리스트에 즉시 노출되도록 시작일 기준의 첫 번째 실행 인스턴스를 생성
+   * 2. 반복 설정이 있는 경우 즉시 14일치 인스턴스를 생성
    */
   @Override
   @Transactional
@@ -84,8 +86,13 @@ public class TodoServiceImpl implements TodoService {
         .build();
     todoRepository.save(todo);
 
-    // 3. 첫 실행 인스턴스 생성 (마스터와 동일한 담당자)
-    saveInstance(todo, myRoom, targetAssignee, todo.getStartDate());
+    // 3. 즉시 인스턴스 생성 로직 (반복 설정에 따라 14일치 미리 생성)
+    if (todo.getRecurringType() == RecurringType.NONE) {
+      saveInstance(todo, myRoom, targetAssignee, todo.getStartDate());
+    } else {
+      // 반복 설정이 있다면 시작일로부터 즉시 14일치를 생성하여 유저에게 노출
+      todoBatchService.generateInstancesRange(todo, todo.getStartDate(), todo.getStartDate().plusDays(14));
+    }
 
     return TodoConverter.toCreateResponse(todo, null);
   }
