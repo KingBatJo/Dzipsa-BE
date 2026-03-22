@@ -8,8 +8,10 @@ import com.example.dzipsa.domain.todo.converter.TodoConverter;
 import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
+import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
+import com.example.dzipsa.domain.todo.dto.response.TodoNudgeResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.todo.entity.Todo;
 import com.example.dzipsa.domain.todo.entity.TodoInstance;
@@ -187,15 +189,42 @@ public class TodoServiceImpl implements TodoService {
   }
 
   /**
-   * [우리 집 할 일 - 오늘 할 일]
+   * [우리 집 할 일 - 오늘 할 일 & 넛지 데이터]
    */
   @Override
-  public List<TodoSummaryResponse> getRoomTodoList(Long userId) {
+  public RoomTodoResponse getRoomTodoList(Long userId) {
     Long roomId = getActiveRoomMember(userId).getRoomId();
-    return todoInstanceRepository.findRoomTodayTodos(roomId, LocalDate.now())
-        .stream()
-        .map(TodoConverter::toSummaryResponse)
-        .collect(Collectors.toList());
+    LocalDate today = LocalDate.now();
+
+    // 1. 오늘 우리 집의 전체 인스턴스 조회
+    List<TodoInstance> todayInstances = todoInstanceRepository.findRoomTodayTodos(roomId, today);
+
+    // 2. 넛지 가이드에 필요한 개수 데이터 계산
+    int totalCount = todayInstances.size();
+
+    int completedCount = (int) todayInstances.stream()
+        .filter(ti -> ti.getStatus() == TodoStatus.COMPLETED)
+        .count();
+
+    int myRemainingCount = (int) todayInstances.stream()
+        .filter(ti -> ti.getActualAssignee().getId().equals(userId))
+        .filter(ti -> ti.getStatus() == TodoStatus.PENDING)
+        .count();
+
+    // 3. TodoNudgeResponse 생성
+    TodoNudgeResponse nudgeInfo = TodoNudgeResponse.builder()
+        .totalRoomTodoCount(totalCount)
+        .completedRoomTodoCount(completedCount)
+        .myRemainingTodoCount(myRemainingCount)
+        .build();
+
+    // 4. 최종 RoomTodoResponse 반환
+    return RoomTodoResponse.builder()
+        .nudgeInfo(nudgeInfo)
+        .todos(todayInstances.stream()
+            .map(TodoConverter::toSummaryResponse)
+            .collect(Collectors.toList()))
+        .build();
   }
 
   /**
