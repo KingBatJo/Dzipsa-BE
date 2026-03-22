@@ -3,9 +3,11 @@ package com.example.dzipsa.domain.todo.converter;
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
+import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.todo.entity.Todo;
 import com.example.dzipsa.domain.todo.entity.TodoInstance;
+import com.example.dzipsa.domain.todo.entity.enums.RecurringType;
 import com.example.dzipsa.domain.todo.entity.enums.TodoStatus;
 import com.example.dzipsa.domain.user.entity.User;
 import org.springframework.data.domain.Slice;
@@ -13,6 +15,7 @@ import org.springframework.data.domain.Slice;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.util.Arrays;
 import java.util.stream.Collectors;
 
 /**
@@ -88,7 +91,7 @@ public class TodoConverter {
         .instanceId(instance != null ? instance.getId() : null)
         .title(todo.getTitle())
         .memo(todo.getMemo())
-        .assigneeId(todo.getDefaultAssignee() != null ? todo.getDefaultAssignee().getId() : null)
+        .assigneeId(assignee != null ? assignee.getId() : null)
         .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
         .isRandom(todo.getIsRandom())
         .recurringType(todo.getRecurringType())
@@ -96,5 +99,91 @@ public class TodoConverter {
         .startDate(todo.getStartDate())
         .endDate(todo.getEndDate())
         .build();
+  }
+
+  /**
+   * 할 일 상세 정보 응답 변환
+   */
+  public static TodoDetailResponse toDetailResponse(TodoInstance instance, Long userId) {
+    User assignee = instance.getActualAssignee();
+    Todo todo = instance.getTodo();
+    LocalDate today = LocalDate.now();
+
+    // 날짜 포맷 정의 (예: 2026. 3. 23 (월))
+    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy. M. d (E)");
+
+    // 상태 및 세부 문구 계산 기본값
+    String statusStr = "진행";
+    String statusDetail = instance.getTargetDate().format(formatter);
+
+    if (instance.getStatus() == TodoStatus.COMPLETED) {
+      statusStr = "완료";
+
+      // 실제 완료된 날짜 포맷팅
+      String completedDateStr = (instance.getCompletedAt() != null)
+          ? instance.getCompletedAt().format(formatter)
+          : statusDetail;
+
+      if (instance.getCompletedAt() != null && instance.getCompletedAt().toLocalDate().isAfter(instance.getTargetDate())) {
+        statusStr = "지연완료";
+        long delayedDays = ChronoUnit.DAYS.between(instance.getTargetDate(), instance.getCompletedAt().toLocalDate());
+        // "n일 지연, 완료날짜"
+        statusDetail = delayedDays + "일 지연, " + completedDateStr;
+      } else {
+        // 제때 완료한 경우 완료된 날짜 표시
+        statusDetail = completedDateStr;
+      }
+    } else if (instance.getTargetDate().isBefore(today)) {
+      statusStr = "지연";
+      long delayedDays = ChronoUnit.DAYS.between(instance.getTargetDate(), today);
+      statusDetail = delayedDays + "일 지연";
+    }
+
+    return TodoDetailResponse.builder()
+        .instanceId(instance.getId())
+        .title(todo.getTitle())
+        .targetDate(instance.getTargetDate())
+        .memo(todo.getMemo())
+        .assigneeId(assignee != null ? assignee.getId() : null)
+        .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
+        .assigneeProfileImage(assignee != null ? assignee.getProfileImageUrl() : null)
+        .recurringInfo(formatRecurringText(todo.getRecurringType(), todo.getRepeatDays()))
+        .status(statusStr)
+        .statusDetail(statusDetail)
+        .imageUrl(instance.getImageUrl())
+        .isOwner(assignee != null && assignee.getId().equals(userId))
+        .build();
+  }
+
+  private static String formatRecurringText(RecurringType type, String days) {
+    if (type == RecurringType.NONE) return "반복 없음";
+
+    if (type == RecurringType.WEEKLY && days != null) {
+      String convertedDays = Arrays.stream(days.split(","))
+          .map(String::trim)
+          .map(TodoConverter::dayNumberToKorean)
+          .collect(Collectors.joining(", "));
+      return "매주 " + convertedDays;
+    }
+
+    if (type == RecurringType.MONTHLY && days != null) {
+      return "매월 " + days + "일";
+    }
+
+    return "반복 설정 오류";
+  }
+
+  // 1(월) ~ 7(일) 기준 요일 변환
+  private static String dayNumberToKorean(String dayNum) {
+    return switch (dayNum) {
+      case "1" -> "월";
+      case "2" -> "화";
+      case "3" -> "수";
+      case "4" -> "목";
+      case "5" -> "금";
+      case "6" -> "토";
+      case "7" -> "일";
+      default -> "";
+    };
   }
 }
