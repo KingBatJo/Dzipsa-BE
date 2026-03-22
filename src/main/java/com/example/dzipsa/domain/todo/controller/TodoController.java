@@ -130,14 +130,17 @@ public class TodoController {
   }
 
   /**
-   * [우리집 할 일 - 전체 할 일 통합 현황 조회]
-   * 지연/오늘/예정 데이터를 마감일 순으로 통합 조회
-   * URL: GET /api/todos/room/all
+   * [우리집 할 일 - 특정 구성원의 할 일 조회]
+   * URL: GET /api/todos/room/members/{memberId}
+   * 해당 구성원의 지연된 일 + 오늘 할 일 + 예정된 할 일을 모두 조회
    */
-  @GetMapping("/room/all")
-  public ResponseEntity<List<TodoSummaryResponse>> getRoomAllTodo(
-      @AuthenticationPrincipal User user) {
-    List<TodoSummaryResponse> response = todoService.getRoomAllTodo(user.getId());
+  @GetMapping("/room/members/{memberId}")
+  public ResponseEntity<List<TodoSummaryResponse>> getMemberTodo(
+      @AuthenticationPrincipal User user,
+      @PathVariable Long memberId) {
+
+    List<TodoSummaryResponse> response = todoService.getMemberTodo(user.getId(), memberId);
+
     return ResponseEntity.ok(response);
   }
 
