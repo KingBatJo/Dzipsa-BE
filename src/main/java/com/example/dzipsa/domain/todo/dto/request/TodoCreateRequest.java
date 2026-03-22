@@ -16,7 +16,7 @@ public class TodoCreateRequest {
   @Size(max = 300)
   private String memo;
 
-  private Long defaultAssigneeId; // 미기입 시 작성자 본인
+  private Long assigneeId; // 미기입 시 작성자 본인
 
   private Boolean isRandom;
 
