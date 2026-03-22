@@ -109,8 +109,21 @@ public class TodoController {
   }
 
   /**
-   * [우리집 할 일 - 오늘 할 일 전체 현황 조회]
-   * URL: GET /api/todos/room/today 방 멤버 전체의 오늘 할 일 목록을 생성순으로 조회
+   * [우리집 할 일 - 전체 현황 조회]
+   * URL: GET /api/todos/room/all
+   * 우리 집 멤버들의 오늘을 포함한 과거의 모든 할 일 히스토리를 최신순으로 조회
+   */
+  @GetMapping("/room/all")
+  public ResponseEntity<List<TodoSummaryResponse>> getRoomAllTodo(
+      @AuthenticationPrincipal User user) {
+    List<TodoSummaryResponse> response = todoService.getRoomAllTodo(user.getId());
+    return ResponseEntity.ok(response);
+  }
+
+  /**
+   * [우리집 할 일 - 오늘 할 일 조회]
+   * URL: GET /api/todos/room/today
+   * 방 멤버 전체의 오늘 할 일 목록을 생성순으로 조회
    */
   @GetMapping("/room/today")
   public ResponseEntity<List<TodoSummaryResponse>> getRoomTodayTodo(
@@ -120,7 +133,7 @@ public class TodoController {
   }
 
   /**
-   * [우리집 할 일 - 지연된 할 일 전체 현황 조회]
+   * [우리집 할 일 - 지연된 할 일 조회]
    * URL: GET /api/todos/room/delayed
    */
   @GetMapping("/room/delayed")
@@ -132,7 +145,7 @@ public class TodoController {
   }
 
   /**
-   * [우리집 할 일 - 특정 구성원의 할 일 조회]
+   * [우리집 할 일 - 특정 구성원 할 일 조회]
    * URL: GET /api/todos/room/members/{memberId}
    * 해당 구성원의 지연된 일 + 오늘 할 일 + 예정된 할 일을 모두 조회
    */
