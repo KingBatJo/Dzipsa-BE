@@ -45,18 +45,28 @@ public class TodoBatchService {
     int createdCount = 0;
 
     for (Todo todo : activeTodos) {
-      for (LocalDate targetDate = today; !targetDate.isAfter(maxDate); targetDate = targetDate.plusDays(1)) {
-        if (isInvalidDate(todo, targetDate)) continue;
+      createdCount += generateInstancesRange(todo, today, maxDate);
+    }
+    log.info("[Batch] 생성 완료: 총 {}건", createdCount);
+  }
 
-        if (isRecurringDay(todo, targetDate)) {
-          if (!todoInstanceRepository.existsByTodoIdAndTargetDate(todo.getId(), targetDate)) {
-            createInstance(todo, targetDate);
-            createdCount++;
-          }
+  /**
+   * [공통 로직] 특정 할 일(Todo)에 대해 지정된 기간 내의 인스턴스를 생성
+   * 서비스 레이어(생성 시점)와 배치 레이어에서 공통으로 사용
+   */
+  public int generateInstancesRange(Todo todo, LocalDate start, LocalDate end) {
+    int count = 0;
+    for (LocalDate targetDate = start; !targetDate.isAfter(end); targetDate = targetDate.plusDays(1)) {
+      if (isInvalidDate(todo, targetDate)) continue;
+
+      if (isRecurringDay(todo, targetDate)) {
+        if (!todoInstanceRepository.existsByTodoIdAndTargetDate(todo.getId(), targetDate)) {
+          createInstance(todo, targetDate);
+          count++;
         }
       }
     }
-    log.info("[Batch] 생성 완료: 총 {}건", createdCount);
+    return count;
   }
 
   public String executeSmartBatch() {
@@ -102,6 +112,12 @@ public class TodoBatchService {
 
   private boolean isRecurringDay(Todo todo, LocalDate targetDate) {
     RecurringType type = todo.getRecurringType();
+
+    // 반복 없음일 경우 시작일에만 생성
+    if (type == RecurringType.NONE) {
+      return targetDate.equals(todo.getStartDate());
+    }
+
     if (type == RecurringType.WEEKLY) {
       int dayOfWeek = targetDate.getDayOfWeek().getValue();
       return todo.getRepeatDays() != null && todo.getRepeatDays().contains(String.valueOf(dayOfWeek));
