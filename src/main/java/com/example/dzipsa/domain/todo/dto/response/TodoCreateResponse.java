@@ -12,6 +12,7 @@ public class TodoCreateResponse {
   private Long instanceId;
   private String title;
   private String memo;
+  private LocalDate targetDate;
   private Long assigneeId;
   private String assigneeNickname;
   private Boolean isRandom;
