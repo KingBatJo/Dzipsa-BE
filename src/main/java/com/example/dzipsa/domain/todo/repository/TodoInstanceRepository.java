@@ -7,6 +7,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -126,6 +127,17 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
    * 할 일 등록/수정 직후 응답에 오늘 날짜의 instanceId를 포함하기 위해 사용됨
    */
   Optional<TodoInstance> findByTodoIdAndTargetDate(Long todoId, LocalDate targetDate);
+
+  /**
+   * [수정 시 사용]
+   * 특정 할 일에 대해 오늘 포함 이후의 미완료된 인스턴스들을 삭제
+   * 새로운 수정 규칙으로 인스턴스를 재생성하기 전 기존 데이터를 정리하는 용도
+   */
+  @Modifying
+  @Query("DELETE FROM TodoInstance ti " +
+      "WHERE ti.todo.id = :todoId " +
+      "AND ti.targetDate >= :now")
+  void deleteFutureInstances(@Param("todoId") Long todoId, @Param("now") LocalDate now);
 
   // 배치/로직용 유틸리티 메서드
   boolean existsByTodoIdAndTargetDate(Long todoId, LocalDate targetDate);
