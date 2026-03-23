@@ -3,6 +3,7 @@ package com.example.dzipsa.domain.todo.repository;
 import com.example.dzipsa.domain.todo.entity.Todo;
 import com.example.dzipsa.domain.todo.entity.TodoInstance;
 import com.example.dzipsa.domain.todo.entity.enums.TodoStatus;
+import java.time.LocalDateTime;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Slice;
@@ -121,6 +122,29 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       @Param("userId") Long userId,
       @Param("today") LocalDate today,
       @Param("status") TodoStatus status);
+
+  /**
+   * 방 전체의 완료된 할 일을 최신 완료순으로 조회 (커서 기반 페이징)
+   * * @param roomId          조회할 방 ID
+   * @param status          완료 상태 (COMPLETED)
+   * @param cursorDateTime  커서 기준점(이전 페이지 마지막 데이터의 완료 시간)
+   * @param cursorId        커서 보조점(이전 페이지 마지막 데이터의 ID)
+   * @param pageable        조회 개수 (size) 설정
+   */
+  @Query("SELECT ti FROM TodoInstance ti " +
+      "WHERE ti.room.id = :roomId " +
+      "AND ti.status = :status " +
+      "AND (:cursorDateTime IS NULL " +                             // 첫 페이지면 커서 무시
+      "     OR ti.completedAt < :cursorDateTime " +                // 커서 시간보다 이전이거나
+      "     OR (ti.completedAt = :cursorDateTime AND ti.id < :cursorId)) " + // 시간은 같지만 ID가 작은 것
+      "ORDER BY ti.completedAt DESC, ti.id DESC")                  // 최신 완료순 정렬
+  Slice<TodoInstance> findCompletedTodosWithCursor(
+      @Param("roomId") Long roomId,
+      @Param("status") TodoStatus status,
+      @Param("cursorDateTime") LocalDateTime cursorDateTime,
+      @Param("cursorId") Long cursorId,
+      Pageable pageable
+  );
 
   /**
    * 특정 할 일의 특정 날짜(targetDate)에 해당하는 인스턴스를 조회
