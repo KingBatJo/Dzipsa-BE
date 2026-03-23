@@ -31,16 +31,16 @@ public interface TodoService {
   MyTodoListResponse.PagedTodoResponse getUpcomingTodos(Long userId, String cursor);
 
   // 우리집 할 일 - 오늘 할 일
-  RoomTodoResponse getRoomTodoList(Long userId);
+  RoomTodoResponse getRoomTodoList(Long userId, String cursor);
 
   // 우리집 할 일 - 지연된 할 일
-  List<TodoSummaryResponse> getRoomDelayedTodo(Long userId);
+  MyTodoListResponse.PagedTodoResponse getRoomDelayedTodo(Long userId, String cursor);
 
   // 우리집 할 일 - 전체 조회 (오늘+지연+예정)
-  List<TodoSummaryResponse> getRoomAllTodo(Long userId);
+  MyTodoListResponse.PagedTodoResponse getRoomAllTodo(Long userId, String cursor);
 
   // 특정 구성원의 할 일 조회
-  List<TodoSummaryResponse> getMemberTodo(Long loginUserId, Long targetMemberId);
+  MyTodoListResponse.PagedTodoResponse getMemberTodo(Long loginUserId, Long targetMemberId, String cursor);
 
   // 내 놓친 할 일 카운트
   int getMissedTodoCount(Long userId);
