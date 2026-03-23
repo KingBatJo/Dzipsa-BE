@@ -14,6 +14,7 @@ import com.example.dzipsa.domain.room.repository.RoomInvitationRepository;
 import com.example.dzipsa.domain.room.repository.RoomMemberRepository;
 import com.example.dzipsa.domain.room.repository.RoomRepository;
 import com.example.dzipsa.domain.rule.repository.RuleWarningRepository;
+import com.example.dzipsa.domain.todo.service.TodoService;
 import com.example.dzipsa.domain.user.entity.User;
 import com.example.dzipsa.domain.user.repository.UserRepository;
 import com.example.dzipsa.global.exception.BusinessException;
@@ -41,6 +42,7 @@ public class RoomServiceImpl implements RoomService {
     private final UserRepository userRepository;
     private final RuleWarningRepository ruleWarningRepository;
     private final RoomConverter roomConverter;
+    private final TodoService todoService;
 
     @Override
     @Transactional
@@ -77,7 +79,7 @@ public class RoomServiceImpl implements RoomService {
         log.info("[RoomService] 방 정보 수정 요청. userId={}", user.getId());
         RoomMember myMember = getActiveRoomMember(user.getId());
         Room room = findRoomById(myMember.getRoomId());
-        
+
         validateRoomOwner(room, user.getId());
 
         if (request.getName() != null) {
@@ -89,7 +91,7 @@ public class RoomServiceImpl implements RoomService {
         }
 
         log.info("[RoomService] 방 정보 수정 완료. roomId={}", room.getId());
-        
+
         // 정보 수정 후에도 구성원 목록 포함해서 반환
         List<RoomMemberResponse> members = getRoomMembers(user, false);
         return roomConverter.toRoomResponse(room, null, members);
@@ -138,7 +140,7 @@ public class RoomServiceImpl implements RoomService {
 
         // 멤버 수 증가
         room.increaseMemberCount();
-        
+
         log.info("[RoomService] 방 입장 완료. roomId={}, userId={}", roomId, user.getId());
 
         // 입장 후 방 구성원 목록 조회 (나 포함)
@@ -192,13 +194,14 @@ public class RoomServiceImpl implements RoomService {
 
         // 방 구성원 목록 조회 (나 포함)
         List<RoomMemberResponse> members = getRoomMembers(user, false);
-        
+
         // 최근 24시간 동안 발생한 룰 경고 개수 조회
         LocalDateTime twentyFourHoursAgo = LocalDateTime.now().minusHours(24);
         int ruleWarningCount = ruleWarningRepository.countByRoomIdAndCreatedAtAfter(myRoom.getId(), twentyFourHoursAgo);
 
-        // TODO: 할 일 도메인 구현시 추가
-        int delayTaskCount = 0;
+        // 지연된 할 일 개수 조회
+        int delayTaskCount = todoService.getMissedTodoCount(user.getId());
+
         return roomConverter.toRoomResponse(myRoom, invitationCode, members, ruleWarningCount, delayTaskCount);
     }
 
@@ -254,7 +257,7 @@ public class RoomServiceImpl implements RoomService {
         // 기존 코드를 삭제하고 완전히 새로운 코드를 생성하여 반환함
         String code = roomInvitationRepository.reissueInvitationCode(myMember.getRoomId());
         log.info("[RoomService] 초대 코드 재발급 완료. roomId={}, newCode={}", myMember.getRoomId(), code);
-        
+
         LocalDateTime availableAt = roomInvitationRepository.getReissueAvailableAt(myMember.getRoomId());
 
         return new RoomInvitationCodeResponse(code, availableAt);
@@ -294,7 +297,7 @@ public class RoomServiceImpl implements RoomService {
         log.info("[RoomService] 가훈 조회 요청. userId={}", user.getId());
         RoomMember myMember = getActiveRoomMember(user.getId());
         Room room = findRoomById(myMember.getRoomId());
-        
+
         return new RoomMottoResponse(room.getMotto());
     }
 
