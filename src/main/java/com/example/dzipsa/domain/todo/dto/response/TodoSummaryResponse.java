@@ -18,4 +18,5 @@ public class TodoSummaryResponse {
   private LocalDate targetDate;
   private Long delayDays;
   private String imageUrl;
+  private String completedAt;
 }
