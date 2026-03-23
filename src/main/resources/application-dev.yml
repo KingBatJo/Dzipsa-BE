@@ -1,5 +1,5 @@
 server:
-  port: 8080 # 운영 서버는 8080 포트를 사용
+  port: 8081 # 개발 서버는 8081 포트를 사용하도록 변경
 
 spring:
   application:
@@ -32,7 +32,7 @@ spring:
     redis:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT}
-      database: 0  # 운영 서버는 0번 방을 사용하도록 격리
+      database: 1  # 개발 서버는 1번 방을 사용하도록 격리
 
   # OAuth2
   security:
