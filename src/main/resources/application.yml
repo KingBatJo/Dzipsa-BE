@@ -1,5 +1,5 @@
 server:
-  port: 8081 # 개발 서버는 8081 포트를 사용하도록 변경
+  port: 8080 # 운영 서버는 8080 포트를 사용
 
 spring:
   application:
