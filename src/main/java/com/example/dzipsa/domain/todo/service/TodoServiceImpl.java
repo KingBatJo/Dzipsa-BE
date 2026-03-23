@@ -243,97 +243,128 @@ public class TodoServiceImpl implements TodoService {
    * [우리 집 할 일 - 오늘 할 일 & 넛지 데이터]
    */
   @Override
-  public RoomTodoResponse getRoomTodoList(Long userId) {
+  public RoomTodoResponse getRoomTodoList(Long userId, String cursor) {
     Long roomId = getActiveRoomMember(userId).getRoomId();
     LocalDate today = LocalDate.now();
 
-    // 1. 오늘 우리 집의 전체 인스턴스 조회
-    List<TodoInstance> todayInstances = todoInstanceRepository.findRoomTodayTodos(roomId, today);
+    // 넛지용 전체 카운트 계산
+    List<TodoInstance> totalTodayInstances = todoInstanceRepository.findRoomTodayTodos(roomId, today);
 
-    // 2. 넛지 가이드에 필요한 개수 데이터 계산
-    int totalCount = todayInstances.size();
+    // 무한스크롤용 페이징 조회 (10개 고정)
+    PageRequest pageRequest = PageRequest.of(0, 10);
+    Long cursorId = (cursor == null || cursor.isBlank()) ? 0L : Long.parseLong(cursor);
+    Slice<TodoInstance> todaySlice = todoInstanceRepository.findRoomTodayTodosWithCursor(roomId, today, cursorId, pageRequest);
 
-    int completedCount = (int) todayInstances.stream()
-        .filter(ti -> ti.getStatus() == TodoStatus.COMPLETED)
-        .count();
-
-    int myRemainingCount = (int) todayInstances.stream()
+    int totalCount = totalTodayInstances.size();
+    int completedCount = (int) totalTodayInstances.stream()
+        .filter(ti -> ti.getStatus() == TodoStatus.COMPLETED).count();
+    int myRemainingCount = (int) totalTodayInstances.stream()
         .filter(ti -> ti.getActualAssignee().getId().equals(userId))
-        .filter(ti -> ti.getStatus() == TodoStatus.PENDING)
-        .count();
+        .filter(ti -> ti.getStatus() == TodoStatus.PENDING).count();
 
-    // 3. TodoNudgeResponse 생성
     TodoNudgeResponse nudgeInfo = TodoNudgeResponse.builder()
         .totalRoomTodoCount(totalCount)
         .completedRoomTodoCount(completedCount)
         .myRemainingTodoCount(myRemainingCount)
         .build();
 
-    // 4. 최종 RoomTodoResponse 반환
     return RoomTodoResponse.builder()
         .nudgeInfo(nudgeInfo)
-        .todos(todayInstances.stream()
-            .map(TodoConverter::toSummaryResponse)
-            .collect(Collectors.toList()))
+        .todos(TodoConverter.toPagedResponse(todaySlice))
         .build();
   }
 
   /**
    * [우리 집 할 일 - 지연된 할 일]
-   * 오늘 이전 날짜이면서 PENDING인 것을 조회
    */
   @Override
-  public List<TodoSummaryResponse> getRoomDelayedTodo(Long userId) {
+  public MyTodoListResponse.PagedTodoResponse getRoomDelayedTodo(Long userId, String cursor) {
     Long roomId = getActiveRoomMember(userId).getRoomId();
     LocalDate today = LocalDate.now();
-    return todoInstanceRepository.findRoomDelayedTodos(roomId, today, TodoStatus.PENDING)
-        .stream()
-        .map(TodoConverter::toSummaryResponse)
-        .collect(Collectors.toList());
+    PageRequest pageRequest = PageRequest.of(0, 10);
+
+    LocalDate cursorDate;
+    Long cursorId;
+
+    if (cursor == null || cursor.isBlank()) {
+      cursorDate = LocalDate.of(1900, 1, 1);
+      cursorId = 0L;
+    } else {
+      String[] parts = cursor.split("_");
+      cursorDate = LocalDate.parse(parts[0]);
+      cursorId = Long.parseLong(parts[1]);
+    }
+
+    Slice<TodoInstance> slice = todoInstanceRepository.findRoomDelayedTodosWithCursor(
+        roomId, today, TodoStatus.PENDING, cursorDate, cursorId, pageRequest);
+
+    return TodoConverter.toPagedResponse(slice);
   }
 
   /**
    * [우리 집 할 일 - 모든 할 일]
    */
   @Override
-  public List<TodoSummaryResponse> getRoomAllTodo(Long userId) {
+  public MyTodoListResponse.PagedTodoResponse getRoomAllTodo(Long userId, String cursor) {
     Long roomId = getActiveRoomMember(userId).getRoomId();
-    return todoInstanceRepository.findAllByRoomIdAndStatusNot(roomId, TodoStatus.COMPLETED)
-        .stream()
-        .sorted(Comparator.comparing(TodoInstance::getTargetDate)
-            .thenComparing(TodoInstance::getCreatedAt))
-        .map(TodoConverter::toSummaryResponse)
-        .collect(Collectors.toList());
+    PageRequest pageRequest = PageRequest.of(0, 10);
+
+    LocalDate cursorDate;
+    Long cursorId;
+
+    if (cursor == null || cursor.isBlank()) {
+      cursorDate = LocalDate.of(1900, 1, 1);
+      cursorId = 0L;
+    } else {
+      String[] parts = cursor.split("_");
+      cursorDate = LocalDate.parse(parts[0]);
+      cursorId = Long.parseLong(parts[1]);
+    }
+
+    Slice<TodoInstance> slice = todoInstanceRepository.findRoomAllTodosWithCursor(
+        roomId, TodoStatus.COMPLETED, cursorDate, cursorId, pageRequest);
+
+    return TodoConverter.toPagedResponse(slice);
   }
 
   /**
    * [특정 구성원의 할 일 조회]
    */
   @Override
-  public List<TodoSummaryResponse> getMemberTodo(Long loginUserId, Long targetMemberId) {
+  public MyTodoListResponse.PagedTodoResponse getMemberTodo(Long loginUserId, Long targetMemberId, String cursor) {
     Long roomId = getActiveRoomMember(loginUserId).getRoomId();
-    return todoInstanceRepository.findMemberTodos(roomId, targetMemberId)
-        .stream()
-        .map(TodoConverter::toSummaryResponse)
-        .collect(Collectors.toList());
+    PageRequest pageRequest = PageRequest.of(0, 10);
+
+    LocalDate cursorDate;
+    Long cursorId;
+
+    if (cursor == null || cursor.isBlank()) {
+      cursorDate = LocalDate.of(1900, 1, 1);
+      cursorId = 0L;
+    } else {
+      String[] parts = cursor.split("_");
+      cursorDate = LocalDate.parse(parts[0]);
+      cursorId = Long.parseLong(parts[1]);
+    }
+
+    Slice<TodoInstance> slice = todoInstanceRepository.findMemberTodosWithCursor(
+        roomId, targetMemberId, cursorDate, cursorId, pageRequest);
+
+    return TodoConverter.toPagedResponse(slice);
   }
 
   /**
    * [완료된 할 일 목록 조회]
-   * 방의 모든 구성원이 완료한 할 일을 최신 완료순으로 무한 스크롤 조회합니다.
    */
   @Override
   @Transactional(readOnly = true)
   public MyTodoListResponse.PagedTodoResponse getCompletedTodos(Long userId, String cursor, int size) {
-    // 1. 현재 사용자가 속한 방 정보 확인
     Long roomId = getActiveRoomMember(userId).getRoomId();
-    PageRequest pageRequest = PageRequest.of(0, size); // 커서 기반이므로 항상 첫 페이지(0)에서 size만큼 조회
+    PageRequest pageRequest = PageRequest.of(0, size);
 
     LocalDateTime cursorDateTime = null;
     Long cursorId = null;
 
-    // 2. 커서 파싱 (형태: 2026-03-23T14:00:00_100)
-    // - 클라이언트가 보낸 커서가 있다면 시간과 ID로 분리
     if (cursor != null && !cursor.isBlank()) {
       try {
         String[] parts = cursor.split("_");
@@ -341,28 +372,22 @@ public class TodoServiceImpl implements TodoService {
         cursorId = Long.parseLong(parts[1]);
       } catch (Exception e) {
         log.error("잘못된 커서 형식입니다: {}", cursor);
-        // 에러 발생 시 첫 페이지부터 조회하도록 null 상태 유지
       }
     }
 
-    // 3. DB 데이터 조회 (Slice는 다음 페이지 존재 여부 정보를 포함함)
     Slice<TodoInstance> slice = todoInstanceRepository.findCompletedTodosWithCursor(
         roomId, TodoStatus.COMPLETED, cursorDateTime, cursorId, pageRequest);
 
-    // 4. 응답 DTO 변환 (기존 TodoConverter 활용)
     List<TodoSummaryResponse> content = slice.getContent().stream()
         .map(TodoConverter::toSummaryResponse)
         .collect(Collectors.toList());
 
-    // 5. 다음 조회를 위한 nextCursor 생성
     String nextCursor = null;
     if (slice.hasNext() && !content.isEmpty()) {
-      // 현재 조회된 마지막 데이터의 정보를 커서로 활용
       TodoInstance lastItem = slice.getContent().get(slice.getContent().size() - 1);
       nextCursor = String.format("%s_%d", lastItem.getCompletedAt().toString(), lastItem.getId());
     }
 
-    // 6. 무한 스크롤 전용 공통 응답 객체 반환
     return MyTodoListResponse.PagedTodoResponse.builder()
         .content(content)
         .hasNext(slice.hasNext())
@@ -419,53 +444,29 @@ public class TodoServiceImpl implements TodoService {
     instance.removeImage();
   }
 
-  /**
-   * 할 일 상세 조회
-   * @param userId 조회 요청자 ID (본인 여부 확인용)
-   * @param instanceId 조회할 특정 일자 할 일(Instance)의 ID
-   * @return 할 일 상세 정보 (상태, 반복정보, 담당자 포함)
-   */
   @Override
   @Transactional(readOnly = true)
   public TodoDetailResponse getTodoDetail(Long userId, Long instanceId) {
-    // 1. DB에서 해당 Instance 존재 여부 확인
     TodoInstance instance = todoInstanceRepository.findById(instanceId)
         .orElseThrow(() -> new BusinessException(TodoErrorCode.TODO_INSTANCE_NOT_FOUND));
-
-    // 2. Converter를 통해 엔티티를 응답 DTO로 변환
-    // (상태값 계산 및 반복 주기 한글화 로직은 Converter 내부에서 수행)
     return TodoConverter.toDetailResponse(instance, userId);
   }
 
-  /**
-   * 할 일 상태 초기화 (완료 -> 진행 중으로 변경)
-   * * @param userId 요청자 ID (권한 검증용)
-   * @param instanceId 상태를 변경할 할 일 ID
-   */
   @Override
   @Transactional
   public void resetTodoStatus(Long userId, Long instanceId) {
-    // 1. 해당 Instance 데이터 조회
     TodoInstance instance = todoInstanceRepository.findById(instanceId)
         .orElseThrow(() -> new BusinessException(TodoErrorCode.TODO_INSTANCE_NOT_FOUND));
 
-    // 2. 권한 검증: 현재 할 일의 실제 담당자(Assignee)와 요청한 사용자가 일치하는지 확인
-    // (본인의 할 일만 상태를 '진행 중'으로 되돌릴 수 있음)
     if (!instance.getActualAssignee().getId().equals(userId)) {
       throw new BusinessException(TodoErrorCode.FORBIDDEN_UPDATE_LIMIT);
     }
 
-    // 3. 엔티티 상태 변경
-    // TodoStatus를 PENDING(진행 중)으로 변경하고, 완료 일시(completedAt)를 초기화함
     instance.resetToPending();
   }
 
   // --- 헬퍼 메서드 ---
 
-  /**
-   * [할 일 인스턴스 생성 및 저장]
-   * 마스터(Todo) 설정에 따라 실제 수행할 날짜별 인스턴스를 생성함
-   */
   private TodoInstance saveInstance(Todo todo, Room room, User assignee, LocalDate date) {
     TodoInstance instance = TodoInstance.builder()
         .todo(todo)
@@ -479,20 +480,14 @@ public class TodoServiceImpl implements TodoService {
     return todoInstanceRepository.save(instance);
   }
 
-  /**
-   * [놓친 할 일 목록 페이징 조회]
-   * 오늘 이전 날짜 중 완료되지 않은 항목을 커서 기반으로 조회
-   */
   private Slice<TodoInstance> fetchMissedTodos(Long userId, LocalDate today, String cursor, Pageable pageable) {
     LocalDate cursorDate;
     Long cursorId;
 
-    // 첫 페이지 호출 시 (커서 없음) 가장 먼 미래 날짜와 최대 ID로 초기값 설정
     if (cursor == null || cursor.isBlank()) {
-      cursorDate = LocalDate.of(9999, 12, 31);
-      cursorId = Long.MAX_VALUE;
+      cursorDate = LocalDate.of(1900, 1, 1);
+      cursorId = 0L;
     } else {
-      // 커서 파싱 (날짜_ID 형태)
       String[] parts = cursor.split("_");
       cursorDate = LocalDate.parse(parts[0]);
       cursorId = Long.parseLong(parts[1]);
@@ -500,10 +495,6 @@ public class TodoServiceImpl implements TodoService {
     return todoInstanceRepository.findMissedTodosWithCursor(userId, today, cursorDate, cursorId, pageable);
   }
 
-  /**
-   * [오늘의 할 일 목록 페이징 조회]
-   * 오늘 날짜에 배정된 할 일을 ID 기반 커서로 조회
-   */
   private Slice<TodoInstance> fetchTodayTodos(Long userId, LocalDate today, String cursor, Pageable pageable) {
     Long cursorId = 0L;
     if (cursor != null && !cursor.isBlank()) {
@@ -512,10 +503,6 @@ public class TodoServiceImpl implements TodoService {
     return todoInstanceRepository.findTodayTodosWithCursor(userId, today, cursorId, pageable);
   }
 
-  /**
-   * [예정된 할 일 목록 페이징 조회]
-   * 내일부터 발생할 할 일들을 날짜 및 ID 커서 기반으로 조회
-   */
   private Slice<TodoInstance> fetchUpcomingTodos(Long userId, LocalDate today, String cursor, Pageable pageable) {
     LocalDate cursorDate = today.plusDays(1);
     Long cursorId;
@@ -531,36 +518,22 @@ public class TodoServiceImpl implements TodoService {
     return todoInstanceRepository.findUpcomingTodosWithCursor(userId, today, cursorDate, cursorId, pageable);
   }
 
-  /**
-   * [활성 룸 멤버 조회]
-   * 사용자가 현재 소속되어 있는 집(Room)의 멤버 정보를 가져옴 (탈퇴 제외)
-   */
   private RoomMember getActiveRoomMember(Long userId) {
     return roomMemberRepository.findByUserIdAndLeftAtIsNull(userId)
         .orElseThrow(() -> new BusinessException(RoomErrorCode.ROOM_NOT_FOUND));
   }
 
-  /**
-   * [유효한 룸 조회]
-   * 삭제되지 않은 방(Room) 정보를 ID로 조회
-   */
   private Room findRoomById(Long roomId) {
     return roomRepository.findByIdAndDeletedAtIsNull(roomId)
         .orElseThrow(() -> new BusinessException(RoomErrorCode.ROOM_NOT_FOUND));
   }
 
-  /**
-   * 시작일과 종료일의 논리적 타당성 검증
-   */
   private void validateTodoDates(LocalDate start, LocalDate end) {
     if (end != null && start.isAfter(end)) {
       throw new BusinessException(TodoErrorCode.INVALID_DATE_RANGE);
     }
   }
 
-  /**
-   * 반복 규칙을 분석하여 가장 가까운 미래의 마감일을 계산
-   */
   private LocalDate calculateFirstRecurringDate(Todo todo) {
     LocalDate start = todo.getStartDate();
     RecurringType type = todo.getRecurringType();
@@ -573,12 +546,9 @@ public class TodoServiceImpl implements TodoService {
     if (type == RecurringType.MONTHLY) {
       try {
         int dayOfMonth = Integer.parseInt(days.trim());
-        // 시작일의 날짜를 설정된 날짜로 맞춤
         LocalDate firstDate = start.withDayOfMonth(Math.min(dayOfMonth, start.lengthOfMonth()));
-        // 만약 맞춘 날짜가 시작일보다 전이면 다음 달로 넘김
         if (firstDate.isBefore(start)) {
           firstDate = firstDate.plusMonths(1);
-          // 다음 달에도 해당 날짜가 존재하는지 확인 (예: 31일 설정 시 2월 처리)
           firstDate = firstDate.withDayOfMonth(Math.min(dayOfMonth, firstDate.lengthOfMonth()));
         }
         return firstDate;
@@ -586,8 +556,6 @@ public class TodoServiceImpl implements TodoService {
         return start;
       }
     }
-
-    // 주간 반복 등 다른 케이스는 일단 시작일 반환
     return start;
   }
 }
