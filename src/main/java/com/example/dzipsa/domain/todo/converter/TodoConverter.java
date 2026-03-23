@@ -68,17 +68,22 @@ public class TodoConverter {
     return days > 0 ? days : 0L;
   }
 
-  // 커서 생성 로직 (상태에 따라 완료일시 또는 예정일 기반으로 생성)
+  // 커서 생성 로직
   private static String generateCursor(Slice<TodoInstance> slice) {
     if (!slice.hasContent()) return null;
     TodoInstance lastItem = slice.getContent().get(slice.getContent().size() - 1);
 
-    // 완료된 할 일 섹션인 경우 '완료일시_ID' 기반 커서 생성
+    // 1. 완료된 할 일 섹션 (완료일시_ID)
     if (lastItem.getStatus() == TodoStatus.COMPLETED && lastItem.getCompletedAt() != null) {
       return lastItem.getCompletedAt().toString() + "_" + lastItem.getId();
     }
 
-    // 진행 중인 섹션(지연/오늘/예정)인 경우 '예정일_ID' 기반 커서 생성
+    // 2. 오늘 할 일 섹션 (ID만 반환)
+    if (lastItem.getTargetDate().equals(LocalDate.now())) {
+      return lastItem.getId().toString();
+    }
+
+    // 3. 지연/예정된 할 일 섹션 (예정일_ID)
     return lastItem.getTargetDate().toString() + "_" + lastItem.getId();
   }
 
