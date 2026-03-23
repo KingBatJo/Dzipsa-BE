@@ -1,0 +1,63 @@
+name: Spring Boot Deploy to EC2 (DEV)
+
+# dev 브랜치에 push 될 때만 작동하도록 설정
+on:
+  push:
+    branches: [ "develop" ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. 내 코드 가져오기 (Checkout)
+        uses: actions/checkout@v3
+
+      - name: 2. JDK 17 환경 설정
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'corretto'
+
+      - name: 3. Gradle 실행 권한 부여
+        run: chmod +x gradlew
+
+      - name: 4. Spring Boot 애플리케이션 빌드 (테스트 제외)
+        run: ./gradlew clean build -x test
+
+      # 운영 서버의 app.jar와 겹치지 않도록 이름을 app-dev.jar로 고정합니다.
+      - name: 5. 빌드 파일 이름 변경
+        run: mv build/libs/*SNAPSHOT.jar build/libs/app-dev.jar
+
+      - name: 6. 빌드된 파일(.jar)을 EC2로 전송
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "build/libs/app-dev.jar" # 변경된 이름으로 전송
+          target: "/home/ubuntu/develop"
+
+      - name: 7. EC2에 접속해서 기존 개발 서버 끄고 새 개발 서버 실행
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/ubuntu/develop
+            
+            echo "기존 개발 서버를 안전하게 종료합니다."
+            sudo fuser -k -n tcp 8081 || true  # 운영 서버(8080)가 아닌 개발 서버(8081) 포트 종료
+            
+            # 포트가 완전히 해제될 때까지 5초 대기
+            sleep 5
+            
+            # 개발용 .env.dev 환경변수 적용 
+            set -a
+            source .env.dev
+            set +a
+            
+            echo "새로운 개발 서버를 백그라운드에서 실행합니다."
+            # app-dev.jar를 dev 프로필로 실행하고 로그도 분리
+            nohup java -jar -Dspring.profiles.active=dev build/libs/app-dev.jar > app-dev.log 2>&1 &
