@@ -125,9 +125,10 @@ public class TodoController {
    */
   @Operation(summary = "우리집 할 일 - 전체 미완료 현황 조회", description = "방 안의 모든 미완료 할 일을 날짜순으로 조회합니다.")
   @GetMapping("/room/all")
-  public ResponseEntity<List<TodoSummaryResponse>> getRoomAllTodo(
-      @AuthenticationPrincipal User user) {
-    List<TodoSummaryResponse> response = todoService.getRoomAllTodo(user.getId());
+  public ResponseEntity<MyTodoListResponse.PagedTodoResponse> getRoomAllTodo(
+      @AuthenticationPrincipal User user,
+      @Parameter(description = "이전 페이지 마지막 데이터의 날짜_ID") @RequestParam(required = false) String cursor) {
+    MyTodoListResponse.PagedTodoResponse response = todoService.getRoomAllTodo(user.getId(), cursor);
     return ResponseEntity.ok(response);
   }
 
@@ -139,8 +140,9 @@ public class TodoController {
   @Operation(summary = "우리집 할 일 - 오늘 할 일 및 넛지 조회", description = "우리 집 구성원의 오늘 할 일과 요약(진행률) 정보를 조회합니다.")
   @GetMapping("/room/today")
   public ResponseEntity<RoomTodoResponse> getRoomTodoList(
-      @AuthenticationPrincipal User user) {
-    return ResponseEntity.ok(todoService.getRoomTodoList(user.getId()));
+      @AuthenticationPrincipal User user,
+      @Parameter(description = "이전 페이지 마지막 데이터의 ID") @RequestParam(required = false) String cursor) {
+    return ResponseEntity.ok(todoService.getRoomTodoList(user.getId(), cursor));
   }
 
   /**
@@ -149,10 +151,10 @@ public class TodoController {
    */
   @Operation(summary = "우리집 할 일 - 지연된 할 일 조회", description = "우리 집 구성원이 놓친 할 일들을 조회합니다.")
   @GetMapping("/room/delayed")
-  public ResponseEntity<List<TodoSummaryResponse>> getRoomDelayedTodo(
-      @AuthenticationPrincipal User user) {
-    // 기존 build()에서 서비스 호출로 변경
-    List<TodoSummaryResponse> response = todoService.getRoomDelayedTodo(user.getId());
+  public ResponseEntity<MyTodoListResponse.PagedTodoResponse> getRoomDelayedTodo(
+      @AuthenticationPrincipal User user,
+      @Parameter(description = "이전 페이지 마지막 데이터의 날짜_ID") @RequestParam(required = false) String cursor) {
+    MyTodoListResponse.PagedTodoResponse response = todoService.getRoomDelayedTodo(user.getId(), cursor);
     return ResponseEntity.ok(response);
   }
 
@@ -163,11 +165,12 @@ public class TodoController {
    */
   @Operation(summary = "우리집 할 일 - 특정 구성원 할 일 조회", description = "선택한 구성원에게 할당된 모든 할 일 목록을 조회합니다.")
   @GetMapping("/room/members/{memberId}")
-  public ResponseEntity<List<TodoSummaryResponse>> getMemberTodo(
+  public ResponseEntity<MyTodoListResponse.PagedTodoResponse> getMemberTodo(
       @AuthenticationPrincipal User user,
-      @Parameter(description = "조회할 구성원 ID") @PathVariable Long memberId) {
+      @Parameter(description = "조회할 구성원 ID") @PathVariable Long memberId,
+      @Parameter(description = "이전 페이지 마지막 데이터의 날짜_ID") @RequestParam(required = false) String cursor) {
 
-    List<TodoSummaryResponse> response = todoService.getMemberTodo(user.getId(), memberId);
+    MyTodoListResponse.PagedTodoResponse response = todoService.getMemberTodo(user.getId(), memberId, cursor);
 
     return ResponseEntity.ok(response);
   }
