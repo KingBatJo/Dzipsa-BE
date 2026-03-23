@@ -4,13 +4,11 @@ import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.user.entity.User;
 import java.util.List;
-import org.springframework.data.domain.Slice;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface TodoService {
@@ -47,8 +45,8 @@ public interface TodoService {
   // 내 놓친 할 일 카운트
   int getMissedTodoCount(Long userId);
 
-  // 완료된 할 일
-  Slice<TodoCompletedResponse> getCompletedTodos(Long userId, int page, int size);
+  // 완료된 할 일 목록 조회
+  MyTodoListResponse.PagedTodoResponse getCompletedTodos(Long userId, String cursor, int size);
 
   // 할 일 완료 처리
   void completeTodo(Long userId, Long instanceId, MultipartFile image);
