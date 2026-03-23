@@ -15,7 +15,7 @@ public class TodoDetailResponse {
   // 담당자 정보
   private Long assigneeId;
   private String assigneeNickname;
-  private String assigneeProfileImage;
+  private String profileImageUrl;
 
   // 반복 및 상태
   private String recurringInfo;     // 예: "매주 월, 목"

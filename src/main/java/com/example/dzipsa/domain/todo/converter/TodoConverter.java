@@ -1,7 +1,6 @@
 package com.example.dzipsa.domain.todo.converter;
 
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
@@ -25,22 +24,10 @@ import java.util.stream.Collectors;
  */
 public class TodoConverter {
 
-  // 완료된 할 일 DTO 변환 (인증샷 포함 리스트용)
-  public static TodoCompletedResponse toCompletedDTO(TodoInstance instance) {
-    User assignee = instance.getActualAssignee();
-    return TodoCompletedResponse.builder()
-        .instanceId(instance.getId())
-        .title(instance.getTodo().getTitle())
-        .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
-        .profileImageUrl(assignee != null ? assignee.getProfileImageUrl() : null)
-        .imageUrl(instance.getImageUrl())
-        .completedAt(instance.getCompletedAt() != null
-            ? instance.getCompletedAt().format(DateTimeFormatter.ofPattern("a hh:mm"))
-            : null)
-        .build();
-  }
-
-  // 단일 인스턴스 요약 정보 변환 (지연/오늘/예정 공통)
+  /**
+   * 단일 할 일 요약 정보 변환 (지연/오늘/예정/완료 히스토리 공통)
+   * 통합된 TodoSummaryResponse 규격을 사용하여 모든 목록 API에 대응
+   */
   public static TodoSummaryResponse toSummaryResponse(TodoInstance instance) {
     User assignee = instance.getActualAssignee();
 
@@ -52,9 +39,12 @@ public class TodoConverter {
         .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
         .profileImageUrl(assignee != null ? assignee.getProfileImageUrl() : null)
         .status(instance.getStatus())
-        .targetDate(instance.getTargetDate())
-        .delayDays(calculateDelay(instance.getTargetDate(), instance.getStatus()))
-        .imageUrl(instance.getImageUrl())
+        .targetDate(instance.getTargetDate()) // 수행 예정일
+        .delayDays(calculateDelay(instance.getTargetDate(), instance.getStatus())) // 지연 일수 계산
+        .imageUrl(instance.getImageUrl()) // 완료 인증샷 URL
+        .completedAt(instance.getCompletedAt() != null
+            ? instance.getCompletedAt().format(DateTimeFormatter.ofPattern("yyyy.MM.dd")) // UI 기획에 맞춘 날짜 포맷
+            : null)
         .build();
   }
 
@@ -78,10 +68,17 @@ public class TodoConverter {
     return days > 0 ? days : 0L;
   }
 
-  // 커서 생성 로직 (날짜_ID 결합)
+  // 커서 생성 로직 (상태에 따라 완료일시 또는 예정일 기반으로 생성)
   private static String generateCursor(Slice<TodoInstance> slice) {
     if (!slice.hasContent()) return null;
     TodoInstance lastItem = slice.getContent().get(slice.getContent().size() - 1);
+
+    // 완료된 할 일 섹션인 경우 '완료일시_ID' 기반 커서 생성
+    if (lastItem.getStatus() == TodoStatus.COMPLETED && lastItem.getCompletedAt() != null) {
+      return lastItem.getCompletedAt().toString() + "_" + lastItem.getId();
+    }
+
+    // 진행 중인 섹션(지연/오늘/예정)인 경우 '예정일_ID' 기반 커서 생성
     return lastItem.getTargetDate().toString() + "_" + lastItem.getId();
   }
 
@@ -151,7 +148,7 @@ public class TodoConverter {
         .memo(todo.getMemo())
         .assigneeId(assignee != null ? assignee.getId() : null)
         .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
-        .assigneeProfileImage(assignee != null ? assignee.getProfileImageUrl() : null)
+        .profileImageUrl(assignee != null ? assignee.getProfileImageUrl() : null)
         .recurringInfo(formatRecurringText(todo.getRecurringType(), todo.getRepeatDays()))
         .status(statusStr)
         .statusDetail(statusDetail)

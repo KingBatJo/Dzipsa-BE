@@ -9,7 +9,6 @@ import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoNudgeResponse;
@@ -27,6 +26,7 @@ import com.example.dzipsa.global.exception.domain.RoomErrorCode;
 import com.example.dzipsa.global.exception.domain.TodoErrorCode;
 import com.example.dzipsa.global.util.S3Uploader;
 import java.io.IOException;
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -319,14 +319,55 @@ public class TodoServiceImpl implements TodoService {
   }
 
   /**
-   * [완료된 할 일 모아보기]
+   * [완료된 할 일 목록 조회]
+   * 방의 모든 구성원이 완료한 할 일을 최신 완료순으로 무한 스크롤 조회합니다.
    */
   @Override
-  public Slice<TodoCompletedResponse> getCompletedTodos(Long userId, int page, int size) {
+  @Transactional(readOnly = true)
+  public MyTodoListResponse.PagedTodoResponse getCompletedTodos(Long userId, String cursor, int size) {
+    // 1. 현재 사용자가 속한 방 정보 확인
     Long roomId = getActiveRoomMember(userId).getRoomId();
-    Slice<TodoInstance> completed = todoInstanceRepository.findCompletedTodos(
-        roomId, TodoStatus.COMPLETED, PageRequest.of(page, size));
-    return completed.map(TodoConverter::toCompletedDTO);
+    PageRequest pageRequest = PageRequest.of(0, size); // 커서 기반이므로 항상 첫 페이지(0)에서 size만큼 조회
+
+    LocalDateTime cursorDateTime = null;
+    Long cursorId = null;
+
+    // 2. 커서 파싱 (형태: 2026-03-23T14:00:00_100)
+    // - 클라이언트가 보낸 커서가 있다면 시간과 ID로 분리
+    if (cursor != null && !cursor.isBlank()) {
+      try {
+        String[] parts = cursor.split("_");
+        cursorDateTime = LocalDateTime.parse(parts[0]);
+        cursorId = Long.parseLong(parts[1]);
+      } catch (Exception e) {
+        log.error("잘못된 커서 형식입니다: {}", cursor);
+        // 에러 발생 시 첫 페이지부터 조회하도록 null 상태 유지
+      }
+    }
+
+    // 3. DB 데이터 조회 (Slice는 다음 페이지 존재 여부 정보를 포함함)
+    Slice<TodoInstance> slice = todoInstanceRepository.findCompletedTodosWithCursor(
+        roomId, TodoStatus.COMPLETED, cursorDateTime, cursorId, pageRequest);
+
+    // 4. 응답 DTO 변환 (기존 TodoConverter 활용)
+    List<TodoSummaryResponse> content = slice.getContent().stream()
+        .map(TodoConverter::toSummaryResponse)
+        .collect(Collectors.toList());
+
+    // 5. 다음 조회를 위한 nextCursor 생성
+    String nextCursor = null;
+    if (slice.hasNext() && !content.isEmpty()) {
+      // 현재 조회된 마지막 데이터의 정보를 커서로 활용
+      TodoInstance lastItem = slice.getContent().get(slice.getContent().size() - 1);
+      nextCursor = String.format("%s_%d", lastItem.getCompletedAt().toString(), lastItem.getId());
+    }
+
+    // 6. 무한 스크롤 전용 공통 응답 객체 반환
+    return MyTodoListResponse.PagedTodoResponse.builder()
+        .content(content)
+        .hasNext(slice.hasNext())
+        .nextCursor(nextCursor)
+        .build();
   }
 
   /**
