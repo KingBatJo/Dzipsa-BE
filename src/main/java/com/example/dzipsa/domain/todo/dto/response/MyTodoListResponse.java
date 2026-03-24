@@ -1,8 +1,10 @@
 package com.example.dzipsa.domain.todo.dto.response;
 
+import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import java.util.List;
+import lombok.Setter;
 
 /**
  * [나의 할 일 통합 응답]
@@ -22,6 +24,8 @@ public class MyTodoListResponse {
 
   @Getter
   @Builder
+  @Setter
+  @AllArgsConstructor
   public static class PagedTodoResponse {
     private List<TodoSummaryResponse> content;
     private Boolean hasNext;
