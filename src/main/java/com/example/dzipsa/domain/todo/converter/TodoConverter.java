@@ -44,7 +44,7 @@ public class TodoConverter {
         .profileImageUrl(assignee != null ? assignee.getProfileImageUrl() : null)
         .status(instance.getStatus())
         .targetDate(instance.getTargetDate()) // 수행 예정일
-        .delayDays(calculateDelay(instance.getTargetDate(), instance.getStatus())) // 지연 일수 계산
+        .delayDays(calculateDelay(instance)) // 지연 일수 계산
         .imageUrl(instance.getImageUrl()) // 완료 인증샷 URL
         .completedAt(instance.getCompletedAt() != null
             ? instance.getCompletedAt().toString() // 커서와 통일성을 위해 ISO 8601 원본 문자열 반환 (나노초 포함)
@@ -65,11 +65,21 @@ public class TodoConverter {
         .build();
   }
 
-  // 지연 날짜 계산
-  private static Long calculateDelay(LocalDate targetDate, TodoStatus status) {
-    if (status == TodoStatus.COMPLETED) return 0L;
+  // 지연 날짜 계산 로직
+  private static Long calculateDelay(TodoInstance instance) {
+    LocalDate targetDate = instance.getTargetDate();
+
+    // 1. 완료된 경우: 완료일과 마감일 비교
+    if (instance.getStatus() == TodoStatus.COMPLETED) {
+      if (instance.getCompletedAt() == null) return 0L;
+
+      long days = ChronoUnit.DAYS.between(targetDate, instance.getCompletedAt().toLocalDate());
+      return Math.max(0, days); // 일찍 했으면(음수) 0, 늦게 했으면(양수) 그 숫자만큼 반환
+    }
+
+    // 2. 미완료인 경우: 오늘 날짜와 마감일 비교
     long days = ChronoUnit.DAYS.between(targetDate, LocalDate.now());
-    return days > 0 ? days : 0L;
+    return Math.max(0, days); // 아직 마감 전이면(음수) 0 반환
   }
 
   // 커서 생성 로직
@@ -118,52 +128,31 @@ public class TodoConverter {
   public static TodoDetailResponse toDetailResponse(TodoInstance instance, Long userId) {
     User assignee = instance.getActualAssignee();
     Todo todo = instance.getTodo();
-    LocalDate today = LocalDate.now();
-
-    // 날짜 포맷 정의 (예: 2026. 3. 23 (월))
-    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy. M. d (E)");
-
-    // 상태 및 세부 문구 계산 기본값
-    String statusStr = "진행";
-    String statusDetail = instance.getTargetDate().format(formatter);
-
-    if (instance.getStatus() == TodoStatus.COMPLETED) {
-      statusStr = "완료";
-
-      // 실제 완료된 날짜 포맷팅
-      String completedDateStr = (instance.getCompletedAt() != null)
-          ? instance.getCompletedAt().format(formatter)
-          : statusDetail;
-
-      if (instance.getCompletedAt() != null && instance.getCompletedAt().toLocalDate().isAfter(instance.getTargetDate())) {
-        statusStr = "지연완료";
-        long delayedDays = ChronoUnit.DAYS.between(instance.getTargetDate(), instance.getCompletedAt().toLocalDate());
-        // "n일 지연, 완료날짜"
-        statusDetail = delayedDays + "일 지연, " + completedDateStr;
-      } else {
-        // 제때 완료한 경우 완료된 날짜 표시
-        statusDetail = completedDateStr;
-      }
-    } else if (instance.getTargetDate().isBefore(today)) {
-      statusStr = "지연";
-      long delayedDays = ChronoUnit.DAYS.between(instance.getTargetDate(), today);
-      statusDetail = delayedDays + "일 지연";
-    }
 
     return TodoDetailResponse.builder()
         .todoId(todo.getId())
         .instanceId(instance.getId())
         .title(todo.getTitle())
-        .targetDate(instance.getTargetDate())
         .memo(todo.getMemo())
+        // 담당자 정보
         .assigneeId(assignee != null ? assignee.getId() : null)
         .assigneeNickname(assignee != null ? assignee.getNickname() : "미지정")
         .profileImageUrl(assignee != null ? assignee.getProfileImageUrl() : null)
-        .recurringInfo(formatRecurringText(todo.getRecurringType(), todo.getRepeatDays()))
-        .status(statusStr)
-        .statusDetail(statusDetail)
+        // 반복 및 등록 정보 (프론트 요구: 등록 필드 다 넣기)
+        .targetDate(instance.getTargetDate())
+        .recurringType(todo.getRecurringType())
+        .repeatDays(todo.getRepeatDays())
+        .startDate(todo.getStartDate())
+        .endDate(todo.getEndDate())
+        .isRandom(todo.getIsRandom())
+        // 상태 및 시간 데이터
+        .status(instance.getStatus())
+        .completedAt(instance.getCompletedAt())
+        .delayDays(calculateDelay(instance))
+        // 인증샷 및 권한
         .imageUrl(instance.getImageUrl())
         .isOwner(assignee != null && assignee.getId().equals(userId))
+        .isWriter(todo.getWriter().getId().equals(userId))
         .build();
   }
 
