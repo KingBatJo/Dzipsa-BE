@@ -1,6 +1,7 @@
 package com.example.dzipsa.domain.todo.controller;
 
 import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
+import com.example.dzipsa.domain.todo.dto.request.TodoDeleteRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
@@ -229,6 +230,24 @@ public class TodoController {
   ) {
     todoService.completeTodo(user.getId(), instanceId, image);
     return ResponseEntity.ok().build();
+  }
+
+  /**
+   * [반복 할 일 삭제]
+   * URL: DELETE /api/todos/recurring/{instanceId}
+   */
+  @Operation(
+      summary = "반복 할 일 삭제 (범위 선택)",
+      description = "선택한 인스턴스를 기준으로 '이 일정만', '이후 모두', '전체 반복' 삭제를 수행합니다."
+  )
+  @DeleteMapping("/recurring/{instanceId}") // URL을 조금 더 구체적으로 변경
+  public ResponseEntity<Void> deleteRecurringTodo(
+      @AuthenticationPrincipal User user,
+      @Parameter(description = "삭제 기준이 되는 회차(Instance) ID") @PathVariable Long instanceId,
+      @Valid @RequestBody TodoDeleteRequest request) {
+
+    todoService.deleteTodo(user.getId(), instanceId, request);
+    return ResponseEntity.noContent().build();
   }
 
   /**
