@@ -142,7 +142,17 @@ public class TodoBatchService {
     }
 
     if (type == RecurringType.MONTHLY) {
-      return String.valueOf(targetDate.getDayOfMonth()).equals(todo.getRepeatDays());
+      try {
+        int settingDay = Integer.parseInt(todo.getRepeatDays().trim()); // 설정된 실행일 (ex: 31)
+        int lastDayOfMonth = targetDate.lengthOfMonth(); // 현재 체크 중인 달의 말일 (ex: 2월은 28)
+
+        // 설정값이 해당 월의 말일보다 크면 말일을 실행일로 간주 (ex: 31일 설정 시 2월은 28일에 true)
+        int actualExecutionDay = Math.min(settingDay, lastDayOfMonth);
+
+        return targetDate.getDayOfMonth() == actualExecutionDay;
+      } catch (NumberFormatException e) {
+        throw new BusinessException(TodoErrorCode.INVALID_RECURRING_PARS);
+      }
     }
 
     return false;
