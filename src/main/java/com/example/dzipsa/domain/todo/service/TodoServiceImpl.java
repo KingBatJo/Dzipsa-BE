@@ -665,13 +665,22 @@ public class TodoServiceImpl implements TodoService {
       return start;
     }
 
+    // 매월 반복일 경우: 29~31일 선택 시 말일 처리 로직
     if (type == RecurringType.MONTHLY) {
       try {
         int dayOfMonth = Integer.parseInt(days.trim());
-        LocalDate firstDate = start.withDayOfMonth(Math.min(dayOfMonth, start.lengthOfMonth()));
+
+        // 1. 시작 날짜가 속한 달의 길이를 확인
+        int lastDayOfStartMonth = start.lengthOfMonth();
+
+        // 2. 선택한 날짜가 해당 월의 마지막 날보다 크면 말일로 조정 (예: 2월 31일 선택 시 28일/29일)
+        LocalDate firstDate = start.withDayOfMonth(Math.min(dayOfMonth, lastDayOfStartMonth));
+
+        // 3. 만약 계산된 날짜가 시작일보다 전이라면 다음 달로 넘겨서 다시 계산
         if (firstDate.isBefore(start)) {
-          firstDate = firstDate.plusMonths(1);
-          firstDate = firstDate.withDayOfMonth(Math.min(dayOfMonth, firstDate.lengthOfMonth()));
+          firstDate = start.plusMonths(1);
+          int lastDayOfNextMonth = firstDate.lengthOfMonth();
+          firstDate = firstDate.withDayOfMonth(Math.min(dayOfMonth, lastDayOfNextMonth));
         }
         return firstDate;
       } catch (NumberFormatException e) {
