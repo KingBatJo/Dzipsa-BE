@@ -7,6 +7,7 @@ import lombok.Getter;
 @Getter
 @Builder
 public class TodoDetailResponse {
+  private Long todoId;
   private Long instanceId;
   private String title;
   private LocalDate targetDate; // 마감일
