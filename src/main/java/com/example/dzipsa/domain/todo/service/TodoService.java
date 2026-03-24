@@ -46,7 +46,7 @@ public interface TodoService {
   int getMissedTodoCount(Long userId);
 
   // 완료된 할 일 목록 조회
-  MyTodoListResponse.PagedTodoResponse getCompletedTodos(Long userId, String cursor, int size);
+  MyTodoListResponse.PagedTodoResponse getCompletedTodos(Long userId, String cursor);
 
   // 할 일 완료 처리
   void completeTodo(Long userId, Long instanceId, MultipartFile image);
