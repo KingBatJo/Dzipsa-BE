@@ -1,14 +1,18 @@
 package com.example.dzipsa.domain.todo.converter;
 
 import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
+import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
+import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse.MemberTodoStatsResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
+import com.example.dzipsa.domain.todo.dto.response.TodoNudgeResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.todo.entity.Todo;
 import com.example.dzipsa.domain.todo.entity.TodoInstance;
 import com.example.dzipsa.domain.todo.entity.enums.RecurringType;
 import com.example.dzipsa.domain.todo.entity.enums.TodoStatus;
 import com.example.dzipsa.domain.user.entity.User;
+import java.util.List;
 import org.springframework.data.domain.Slice;
 
 import java.time.LocalDate;
@@ -193,5 +197,28 @@ public class TodoConverter {
       case "7" -> "일";
       default -> "";
     };
+  }
+
+  /**
+   * 우리집 할 일 메인 현황(통계) 변환
+   */
+  public static RoomTodoResponse toRoomTodoResponse(
+      int totalToday, int completedToday, int myRemaining,
+      int todayTotal, int delayedTotal, int allTotal,
+      List<MemberTodoStatsResponse> memberStats,
+      Slice<TodoInstance> todoSlice) {
+
+    return RoomTodoResponse.builder()
+        .nudgeInfo(TodoNudgeResponse.builder()
+            .totalRoomTodoCount(totalToday)
+            .completedRoomTodoCount(completedToday)
+            .myRemainingTodoCount(myRemaining)
+            .todayTotalCount(todayTotal)
+            .delayedTotalCount(delayedTotal)
+            .allTotalCount(allTotal)
+            .build())
+        .memberStats(memberStats)
+        .todos(toPagedResponse(todoSlice))
+        .build();
   }
 }
