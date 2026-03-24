@@ -6,6 +6,7 @@ import com.example.dzipsa.domain.room.repository.RoomMemberRepository;
 import com.example.dzipsa.domain.room.repository.RoomRepository;
 import com.example.dzipsa.domain.todo.converter.TodoConverter;
 import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
+import com.example.dzipsa.domain.todo.dto.request.TodoDeleteRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
 import com.example.dzipsa.domain.todo.dto.response.*;
 import com.example.dzipsa.domain.todo.entity.Todo;
@@ -62,7 +63,7 @@ public class TodoServiceImpl implements TodoService {
     // 날짜 유효성 검증 (시작일이 종료일보다 늦으면 예외 발생)
     validateTodoDates(request.getStartDate(), request.getEndDate());
 
-    // 1. 기본 설정 및 Todo 저장 (기존 코드 동일)
+    // 1. 기본 설정 및 Todo 저장
     RoomMember myMember = getActiveRoomMember(user.getId());
     Room myRoom = findRoomById(myMember.getRoomId());
 
@@ -185,16 +186,20 @@ public class TodoServiceImpl implements TodoService {
   @Override
   public MyTodoListResponse getMyTodoList(Long userId, String missedCursor, String todayCursor, String upcomingCursor) {
     LocalDate today = LocalDate.now();
-    PageRequest pageRequest = PageRequest.of(0, 10);
+
+    log.info("=== [내 할 일 조회 시작] ===");
+    log.info("로그인 유저 ID: {}, 오늘 날짜: {}", userId, today);
+
+    PageRequest pageRequest = PageRequest.of(0, 5);
 
     Slice<TodoInstance> missedSlice = fetchMissedTodos(userId, today, missedCursor, pageRequest);
     Slice<TodoInstance> todaySlice = fetchTodayTodos(userId, today, todayCursor, pageRequest);
     Slice<TodoInstance> upcomingSlice = fetchUpcomingTodos(userId, today, upcomingCursor, pageRequest);
 
     return MyTodoListResponse.builder()
-        .missedTodos(TodoConverter.toPagedResponse(missedSlice))
-        .todayTodos(TodoConverter.toPagedResponse(todaySlice))
-        .upcomingTodos(TodoConverter.toPagedResponse(upcomingSlice))
+        .missedTodos(toPagedResponseWithDate(missedSlice))
+        .todayTodos(toPagedResponseWithId(todaySlice))
+        .upcomingTodos(toPagedResponseWithDate(upcomingSlice))
         .build();
   }
 
@@ -204,25 +209,25 @@ public class TodoServiceImpl implements TodoService {
   @Override
   public MyTodoListResponse.PagedTodoResponse getMissedTodos(Long userId, String cursor) {
     LocalDate today = LocalDate.now();
-    PageRequest pageRequest = PageRequest.of(0, 10);
+    PageRequest pageRequest = PageRequest.of(0, 5);
     Slice<TodoInstance> slice = fetchMissedTodos(userId, today, cursor, pageRequest);
-    return TodoConverter.toPagedResponse(slice);
+    return toPagedResponseWithDate(slice);
   }
 
   @Override
   public MyTodoListResponse.PagedTodoResponse getTodayTodos(Long userId, String cursor) {
     LocalDate today = LocalDate.now();
-    PageRequest pageRequest = PageRequest.of(0, 10);
+    PageRequest pageRequest = PageRequest.of(0, 5);
     Slice<TodoInstance> slice = fetchTodayTodos(userId, today, cursor, pageRequest);
-    return TodoConverter.toPagedResponse(slice);
+    return toPagedResponseWithId(slice);
   }
 
   @Override
   public MyTodoListResponse.PagedTodoResponse getUpcomingTodos(Long userId, String cursor) {
     LocalDate today = LocalDate.now();
-    PageRequest pageRequest = PageRequest.of(0, 10);
+    PageRequest pageRequest = PageRequest.of(0, 5);
     Slice<TodoInstance> slice = fetchUpcomingTodos(userId, today, cursor, pageRequest);
-    return TodoConverter.toPagedResponse(slice);
+    return toPagedResponseWithDate(slice);
   }
 
   /**
@@ -243,32 +248,28 @@ public class TodoServiceImpl implements TodoService {
     LocalDate today = LocalDate.now();
 
     // 1. 넛지 가이드 및 섹션별 전체 카운트 계산
-    // 오늘 전체 할 일 (진행 중 + 완료)
     List<TodoInstance> totalTodayInstances = todoInstanceRepository.findRoomTodayTodos(roomId, today);
+
     int totalTodayCount = totalTodayInstances.size();
     int completedTodayCount = (int) totalTodayInstances.stream()
         .filter(ti -> ti.getStatus() == TodoStatus.COMPLETED).count();
     int myRemainingCount = (int) totalTodayInstances.stream()
         .filter(ti -> ti.getActualAssignee().getId().equals(userId))
         .filter(ti -> ti.getStatus() == TodoStatus.PENDING).count();
+    int todayPendingCount = (int) totalTodayInstances.stream()
+        .filter(ti -> ti.getStatus() == TodoStatus.PENDING).count();
 
-    // 지연된 할 일 카운트 (오늘 이전 날짜 & 미완료)
     int delayedCount = (int) todoInstanceRepository.countRoomDelayedTodos(roomId, today, TodoStatus.PENDING);
-
-    // 모든 할 일 카운트 (진행 중인 모든 상태)
-    int allCount = (int) todoInstanceRepository.countRoomAllTodos(roomId, TodoStatus.COMPLETED);
+    int allPendingCount = (int) todoInstanceRepository.countRoomAllTodos(roomId, TodoStatus.COMPLETED);
 
     // 2. 구성원별 오늘 남은 할 일 통계 추출
     List<RoomMember> members = roomMemberRepository.findByRoomIdAndLeftAtIsNullOrderByJoinedAtAsc(roomId);
     List<RoomTodoResponse.MemberTodoStatsResponse> memberStats = members.stream()
         .filter(member -> !member.getUserId().equals(userId))
         .map(member -> {
-          // RoomMember에는 userId만 있으므로 직접 조회해서 닉네임과 프로필 정보를 가져옴
           User u = userRepository.findById(member.getUserId())
               .orElseThrow(() -> new BusinessException(TodoErrorCode.ASSIGNEE_NOT_FOUND));
 
-          // 오늘 것만 세는 게 아니라, 해당 유저의 모든 미완료(PENDING) 인스턴스를 카운트
-          // Repository에 새로 추가한 countByActualAssigneeIdAndStatus 사용
           int remaining = todoInstanceRepository.countTotalPendingByMember(u.getId(), TodoStatus.PENDING);
 
           return RoomTodoResponse.MemberTodoStatsResponse.builder()
@@ -279,14 +280,13 @@ public class TodoServiceImpl implements TodoService {
               .build();
         }).collect(Collectors.toList());
 
-    // 3. 통계 응답 반환
     return TodoNudgeResponse.builder()
         .totalRoomTodoCount(totalTodayCount)
         .completedRoomTodoCount(completedTodayCount)
         .myRemainingTodoCount(myRemainingCount)
-        .todayTotalCount(totalTodayCount)
+        .todayTotalCount(todayPendingCount)
         .delayedTotalCount(delayedCount)
-        .allTotalCount(allCount)
+        .allTotalCount(allPendingCount)
         .memberStats(memberStats)
         .build();
   }
@@ -299,15 +299,13 @@ public class TodoServiceImpl implements TodoService {
     Long roomId = getActiveRoomMember(userId).getRoomId();
     LocalDate today = LocalDate.now();
 
-    // 무한스크롤용 페이징 조회 (10개 고정)
     PageRequest pageRequest = PageRequest.of(0, 10);
     Long cursorId = (cursor == null || cursor.isBlank()) ? 0L : Long.parseLong(cursor);
 
-    // [수정] 완료된 항목 제외를 위해 TodoStatus.PENDING 파라미터 추가
     Slice<TodoInstance> todaySlice = todoInstanceRepository.findRoomTodayTodosWithCursor(
         roomId, today, TodoStatus.PENDING, cursorId, pageRequest);
 
-    return TodoConverter.toPagedResponse(todaySlice);
+    return toPagedResponseWithId(todaySlice);
   }
 
   /**
@@ -326,15 +324,20 @@ public class TodoServiceImpl implements TodoService {
       cursorDate = LocalDate.of(1900, 1, 1);
       cursorId = 0L;
     } else {
-      String[] parts = cursor.split("_");
-      cursorDate = LocalDate.parse(parts[0]);
-      cursorId = Long.parseLong(parts[1]);
+      try {
+        String[] parts = cursor.split("_");
+        cursorDate = LocalDate.parse(parts[0]);
+        cursorId = Long.parseLong(parts[1]);
+      } catch (Exception e) {
+        cursorDate = LocalDate.of(1900, 1, 1);
+        cursorId = 0L;
+      }
     }
 
     Slice<TodoInstance> slice = todoInstanceRepository.findRoomDelayedTodosWithCursor(
         roomId, today, TodoStatus.PENDING, cursorDate, cursorId, pageRequest);
 
-    return TodoConverter.toPagedResponse(slice);
+    return toPagedResponseWithDate(slice);
   }
 
   /**
@@ -348,19 +351,26 @@ public class TodoServiceImpl implements TodoService {
     LocalDate cursorDate;
     Long cursorId;
 
+    // 모든 할 일은 날짜가 섞이므로 날짜_ID 기반 커서 파싱
     if (cursor == null || cursor.isBlank()) {
       cursorDate = LocalDate.of(1900, 1, 1);
       cursorId = 0L;
     } else {
-      String[] parts = cursor.split("_");
-      cursorDate = LocalDate.parse(parts[0]);
-      cursorId = Long.parseLong(parts[1]);
+      try {
+        String[] parts = cursor.split("_");
+        cursorDate = LocalDate.parse(parts[0]);
+        cursorId = Long.parseLong(parts[1]);
+      } catch (Exception e) {
+        cursorDate = LocalDate.of(1900, 1, 1);
+        cursorId = 0L;
+      }
     }
 
     Slice<TodoInstance> slice = todoInstanceRepository.findRoomAllTodosWithCursor(
         roomId, TodoStatus.COMPLETED, cursorDate, cursorId, pageRequest);
 
-    return TodoConverter.toPagedResponse(slice);
+    // [수정] WithDate를 호출하여 응답 커서가 "날짜_ID" 형식이 되도록 강제
+    return toPagedResponseWithDate(slice);
   }
 
   /**
@@ -374,19 +384,26 @@ public class TodoServiceImpl implements TodoService {
     LocalDate cursorDate;
     Long cursorId;
 
+    // 구성원 할 일도 여러 날짜가 포함되므로 날짜_ID 기반 커서 파싱
     if (cursor == null || cursor.isBlank()) {
       cursorDate = LocalDate.of(1900, 1, 1);
       cursorId = 0L;
     } else {
-      String[] parts = cursor.split("_");
-      cursorDate = LocalDate.parse(parts[0]);
-      cursorId = Long.parseLong(parts[1]);
+      try {
+        String[] parts = cursor.split("_");
+        cursorDate = LocalDate.parse(parts[0]);
+        cursorId = Long.parseLong(parts[1]);
+      } catch (Exception e) {
+        cursorDate = LocalDate.of(1900, 1, 1);
+        cursorId = 0L;
+      }
     }
 
     Slice<TodoInstance> slice = todoInstanceRepository.findMemberTodosWithCursor(
         roomId, targetMemberId, cursorDate, cursorId, pageRequest);
 
-    return TodoConverter.toPagedResponse(slice);
+    // WithDate를 호출하여 응답 커서가 "날짜_ID" 형식이 되도록 강제
+    return toPagedResponseWithDate(slice);
   }
 
   /**
@@ -398,20 +415,19 @@ public class TodoServiceImpl implements TodoService {
     Long roomId = getActiveRoomMember(userId).getRoomId();
     PageRequest pageRequest = PageRequest.of(0, 10);
 
-    LocalDateTime cursorDateTime = null; // 시간 정보 포함
+    LocalDateTime cursorDateTime = null;
     Long cursorId = null;
 
     if (cursor != null && !cursor.isBlank()) {
       try {
         String[] parts = cursor.split("_");
-        cursorDateTime = LocalDateTime.parse(parts[0]); // LocalDateTime으로 파싱
+        cursorDateTime = LocalDateTime.parse(parts[0]);
         cursorId = Long.parseLong(parts[1]);
       } catch (Exception e) {
-        log.error("잘못된 커서 형식입니다: {}", cursor);
+        log.error("잘못된 커서 형식: {}", cursor);
       }
     }
 
-    // Repository 호출
     Slice<TodoInstance> slice = todoInstanceRepository.findCompletedTodosWithCursor(
         roomId, TodoStatus.COMPLETED, cursorDateTime, cursorId, pageRequest);
 
@@ -422,7 +438,6 @@ public class TodoServiceImpl implements TodoService {
     String nextCursor = null;
     if (slice.hasNext() && !content.isEmpty()) {
       TodoInstance lastItem = slice.getContent().get(slice.getContent().size() - 1);
-      // 다음 커서도 시간 정보를 포함해서 생성
       nextCursor = String.format("%s_%d", lastItem.getCompletedAt().toString(), lastItem.getId());
     }
 
@@ -487,6 +502,11 @@ public class TodoServiceImpl implements TodoService {
   public TodoDetailResponse getTodoDetail(Long userId, Long instanceId) {
     TodoInstance instance = todoInstanceRepository.findById(instanceId)
         .orElseThrow(() -> new BusinessException(TodoErrorCode.TODO_INSTANCE_NOT_FOUND));
+
+    if (!instance.getTodo().getIsActive()) {
+      throw new BusinessException(TodoErrorCode.TODO_ALREADY_DELETED);
+    }
+
     return TodoConverter.toDetailResponse(instance, userId);
   }
 
@@ -503,7 +523,57 @@ public class TodoServiceImpl implements TodoService {
     instance.resetToPending();
   }
 
+  /**
+   * [할 일 삭제]
+   */
+  @Override
+  @Transactional
+  public void deleteTodo(Long userId, Long instanceId, TodoDeleteRequest request) {
+    TodoInstance targetInstance = todoInstanceRepository.findById(instanceId)
+        .orElseThrow(() -> new BusinessException(TodoErrorCode.TODO_INSTANCE_NOT_FOUND));
+
+    Todo todo = targetInstance.getTodo();
+    LocalDate targetDate = targetInstance.getTargetDate();
+
+    validateDeletePermission(userId, targetInstance);
+
+    switch (request.getScope()) {
+      case ONLY_THIS:
+        todoInstanceRepository.delete(targetInstance);
+        break;
+
+      case SINCE_THIS:
+        todoInstanceRepository.deleteAllByTodoIdAndTargetDateGreaterThanEqualAndStatus(
+            todo.getId(), targetDate, TodoStatus.PENDING);
+        todo.updateEndDate(targetDate.minusDays(1));
+        break;
+
+      case ALL_RECURRING:
+        todoInstanceRepository.deleteAllByTodoIdAndStatus(todo.getId(), TodoStatus.PENDING);
+        todo.updateIsActive(false);
+        break;
+    }
+  }
+
   // --- 헬퍼 메서드 ---
+
+  private MyTodoListResponse.PagedTodoResponse toPagedResponseWithId(Slice<TodoInstance> slice) {
+    MyTodoListResponse.PagedTodoResponse response = TodoConverter.toPagedResponse(slice);
+    if (slice.hasNext() && !slice.getContent().isEmpty()) {
+      TodoInstance lastItem = slice.getContent().get(slice.getContent().size() - 1);
+      response.setNextCursor(String.valueOf(lastItem.getId()));
+    }
+    return response;
+  }
+
+  private MyTodoListResponse.PagedTodoResponse toPagedResponseWithDate(Slice<TodoInstance> slice) {
+    MyTodoListResponse.PagedTodoResponse response = TodoConverter.toPagedResponse(slice);
+    if (slice.hasNext() && !slice.getContent().isEmpty()) {
+      TodoInstance lastItem = slice.getContent().get(slice.getContent().size() - 1);
+      response.setNextCursor(lastItem.getTargetDate().toString() + "_" + lastItem.getId());
+    }
+    return response;
+  }
 
   private TodoInstance saveInstance(Todo todo, Room room, User assignee, LocalDate date) {
     TodoInstance instance = TodoInstance.builder()
@@ -526,9 +596,14 @@ public class TodoServiceImpl implements TodoService {
       cursorDate = LocalDate.of(1900, 1, 1);
       cursorId = 0L;
     } else {
-      String[] parts = cursor.split("_");
-      cursorDate = LocalDate.parse(parts[0]);
-      cursorId = Long.parseLong(parts[1]);
+      try {
+        String[] parts = cursor.split("_");
+        cursorDate = LocalDate.parse(parts[0]);
+        cursorId = Long.parseLong(parts[1]);
+      } catch (Exception e) {
+        cursorDate = LocalDate.of(1900, 1, 1);
+        cursorId = 0L;
+      }
     }
     return todoInstanceRepository.findMissedTodosWithCursor(userId, today, cursorDate, cursorId, pageable);
   }
@@ -536,22 +611,31 @@ public class TodoServiceImpl implements TodoService {
   private Slice<TodoInstance> fetchTodayTodos(Long userId, LocalDate today, String cursor, Pageable pageable) {
     Long cursorId = 0L;
     if (cursor != null && !cursor.isBlank()) {
-      cursorId = Long.parseLong(cursor);
+      try {
+        cursorId = Long.parseLong(cursor);
+      } catch (NumberFormatException e) {
+        cursorId = 0L;
+      }
     }
     return todoInstanceRepository.findTodayTodosWithCursor(userId, today, TodoStatus.PENDING, cursorId, pageable);
   }
 
   private Slice<TodoInstance> fetchUpcomingTodos(Long userId, LocalDate today, String cursor, Pageable pageable) {
-    LocalDate cursorDate = today.plusDays(1);
+    LocalDate cursorDate;
     Long cursorId;
 
     if (cursor == null || cursor.isBlank()) {
       cursorDate = today;
       cursorId = 0L;
     } else {
-      String[] parts = cursor.split("_");
-      cursorDate = LocalDate.parse(parts[0]);
-      cursorId = Long.parseLong(parts[1]);
+      try {
+        String[] parts = cursor.split("_");
+        cursorDate = LocalDate.parse(parts[0]);
+        cursorId = Long.parseLong(parts[1]);
+      } catch (Exception e) {
+        cursorDate = today;
+        cursorId = 0L;
+      }
     }
     return todoInstanceRepository.findUpcomingTodosWithCursor(userId, today, TodoStatus.PENDING, cursorDate, cursorId, pageable);
   }
@@ -595,5 +679,12 @@ public class TodoServiceImpl implements TodoService {
       }
     }
     return start;
+  }
+
+  private void validateDeletePermission(Long userId, TodoInstance instance) {
+    boolean isAssignee = instance.getActualAssignee().getId().equals(userId);
+    if (!isAssignee) {
+      throw new BusinessException(TodoErrorCode.FORBIDDEN_DELETE);
+    }
   }
 }

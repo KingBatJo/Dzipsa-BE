@@ -207,4 +207,28 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
    */
   @Query("SELECT COUNT(ti) FROM TodoInstance ti WHERE ti.actualAssignee.id = :userId AND ti.status = :status")
   int countTotalPendingByMember(@Param("userId") Long userId, @Param("status") TodoStatus status);
+
+  /**
+   * [할 일 삭제 - SINCE_THIS]
+   * 특정 날짜 이후의 미완료(PENDING) 인스턴스들을 물리 삭제
+   */
+  @Modifying
+  @Query("DELETE FROM TodoInstance ti WHERE ti.todo.id = :todoId " +
+      "AND ti.targetDate >= :targetDate AND ti.status = :status")
+  void deleteAllByTodoIdAndTargetDateGreaterThanEqualAndStatus(
+      @Param("todoId") Long todoId,
+      @Param("targetDate") LocalDate targetDate,
+      @Param("status") TodoStatus status
+  );
+
+  /**
+   * [할 일 삭제 - ALL_RECURRING]
+   * 해당 Todo의 모든 미완료(PENDING) 인스턴스들을 물리 삭제
+   */
+  @Modifying
+  @Query("DELETE FROM TodoInstance ti WHERE ti.todo.id = :todoId AND ti.status = :status")
+  void deleteAllByTodoIdAndStatus(
+      @Param("todoId") Long todoId,
+      @Param("status") TodoStatus status
+  );
 }
