@@ -43,7 +43,7 @@ public class TodoConverter {
         .delayDays(calculateDelay(instance.getTargetDate(), instance.getStatus())) // 지연 일수 계산
         .imageUrl(instance.getImageUrl()) // 완료 인증샷 URL
         .completedAt(instance.getCompletedAt() != null
-            ? instance.getCompletedAt().format(DateTimeFormatter.ofPattern("yyyy.MM.dd")) // UI 기획에 맞춘 날짜 포맷
+            ? instance.getCompletedAt().toString() // 커서와 통일성을 위해 ISO 8601 원본 문자열 반환 (나노초 포함)
             : null)
         .build();
   }
@@ -73,7 +73,7 @@ public class TodoConverter {
     if (!slice.hasContent()) return null;
     TodoInstance lastItem = slice.getContent().get(slice.getContent().size() - 1);
 
-    // 1. 완료된 할 일 섹션 (완료일시_ID)
+    // 1. 완료된 할 일 섹션 (완료일시_ID) - 정밀도 유지를 위해 toString() 사용
     if (lastItem.getStatus() == TodoStatus.COMPLETED && lastItem.getCompletedAt() != null) {
       return lastItem.getCompletedAt().toString() + "_" + lastItem.getId();
     }
@@ -147,6 +147,7 @@ public class TodoConverter {
     }
 
     return TodoDetailResponse.builder()
+        .todoId(todo.getId())
         .instanceId(instance.getId())
         .title(todo.getTitle())
         .targetDate(instance.getTargetDate())

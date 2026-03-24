@@ -194,17 +194,14 @@ public class TodoController {
    * [완료된 할 일 리스트 조회 - 무한 스크롤]
    * URL: GET /api/todos/completed
    * * @param cursor 이전 페이지 마지막 데이터의 "완료일시_ID" (첫 요청 시 생략)
-   * @param size   불러올 데이터 개수 (기본 10개)
    */
   @Operation(summary = "완료된 할 일 리스트 조회", description = "우리 집에서 완료된 모든 할 일을 최신 완료순으로 조회합니다.")
   @GetMapping("/completed")
   public ResponseEntity<MyTodoListResponse.PagedTodoResponse> getCompletedTodos(
       @AuthenticationPrincipal User user,
-      @Parameter(description = "커서 (완료일시_ID)") @RequestParam(required = false) String cursor,
-      @Parameter(description = "페이지 크기") @RequestParam(defaultValue = "10") int size) {
-
-    // 서비스 호출 후 200 OK와 함께 페이징 데이터 반환
-    return ResponseEntity.ok(todoService.getCompletedTodos(user.getId(), cursor, size));
+      @Parameter(description = "이전 페이지 마지막 데이터의 날짜_ID", example = "2026-03-24_8")
+      @RequestParam(required = false) String cursor) { // size 파라미터 삭제
+    return ResponseEntity.ok(todoService.getCompletedTodos(user.getId(), cursor));
   }
 
   /**

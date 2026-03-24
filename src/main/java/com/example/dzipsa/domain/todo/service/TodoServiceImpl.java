@@ -358,23 +358,24 @@ public class TodoServiceImpl implements TodoService {
    */
   @Override
   @Transactional(readOnly = true)
-  public MyTodoListResponse.PagedTodoResponse getCompletedTodos(Long userId, String cursor, int size) {
+  public MyTodoListResponse.PagedTodoResponse getCompletedTodos(Long userId, String cursor) {
     Long roomId = getActiveRoomMember(userId).getRoomId();
-    PageRequest pageRequest = PageRequest.of(0, size);
+    PageRequest pageRequest = PageRequest.of(0, 10);
 
-    LocalDateTime cursorDateTime = null;
+    LocalDateTime cursorDateTime = null; // 시간 정보 포함
     Long cursorId = null;
 
     if (cursor != null && !cursor.isBlank()) {
       try {
         String[] parts = cursor.split("_");
-        cursorDateTime = LocalDateTime.parse(parts[0]);
+        cursorDateTime = LocalDateTime.parse(parts[0]); // LocalDateTime으로 파싱
         cursorId = Long.parseLong(parts[1]);
       } catch (Exception e) {
         log.error("잘못된 커서 형식입니다: {}", cursor);
       }
     }
 
+    // Repository 호출
     Slice<TodoInstance> slice = todoInstanceRepository.findCompletedTodosWithCursor(
         roomId, TodoStatus.COMPLETED, cursorDateTime, cursorId, pageRequest);
 
@@ -385,6 +386,7 @@ public class TodoServiceImpl implements TodoService {
     String nextCursor = null;
     if (slice.hasNext() && !content.isEmpty()) {
       TodoInstance lastItem = slice.getContent().get(slice.getContent().size() - 1);
+      // 다음 커서도 시간 정보를 포함해서 생성
       nextCursor = String.format("%s_%d", lastItem.getCompletedAt().toString(), lastItem.getId());
     }
 
@@ -500,7 +502,7 @@ public class TodoServiceImpl implements TodoService {
     if (cursor != null && !cursor.isBlank()) {
       cursorId = Long.parseLong(cursor);
     }
-    return todoInstanceRepository.findTodayTodosWithCursor(userId, today, cursorId, pageable);
+    return todoInstanceRepository.findTodayTodosWithCursor(userId, today, TodoStatus.PENDING, cursorId, pageable);
   }
 
   private Slice<TodoInstance> fetchUpcomingTodos(Long userId, LocalDate today, String cursor, Pageable pageable) {
@@ -515,7 +517,7 @@ public class TodoServiceImpl implements TodoService {
       cursorDate = LocalDate.parse(parts[0]);
       cursorId = Long.parseLong(parts[1]);
     }
-    return todoInstanceRepository.findUpcomingTodosWithCursor(userId, today, cursorDate, cursorId, pageable);
+    return todoInstanceRepository.findUpcomingTodosWithCursor(userId, today, TodoStatus.PENDING, cursorDate, cursorId, pageable);
   }
 
   private RoomMember getActiveRoomMember(Long userId) {

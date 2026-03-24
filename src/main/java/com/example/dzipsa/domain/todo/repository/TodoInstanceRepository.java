@@ -44,12 +44,13 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
    * [나의 할 일 - 오늘의 할 일 - 무한 스크롤]
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.actualAssignee.id = :userId " +
-      "AND ti.targetDate = :today " +
+      "AND ti.targetDate = :today AND ti.status = :status " +
       "AND ti.id > :cursorId " +
       "ORDER BY ti.id ASC")
   Slice<TodoInstance> findTodayTodosWithCursor(
       @Param("userId") Long userId,
       @Param("today") LocalDate today,
+      @Param("status") TodoStatus status,
       @Param("cursorId") Long cursorId,
       Pageable pageable);
 
@@ -57,12 +58,14 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
    * [나의 할 일 - 예정된 할 일 - 무한 스크롤]
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.actualAssignee.id = :userId " +
-      "AND ti.targetDate > :today " +
+      "AND ti.status = :status " +
+      "AND (ti.targetDate > :today) " +
       "AND (ti.targetDate > :cursorDate OR (ti.targetDate = :cursorDate AND ti.id > :cursorId)) " +
       "ORDER BY ti.targetDate ASC, ti.id ASC")
   Slice<TodoInstance> findUpcomingTodosWithCursor(
       @Param("userId") Long userId,
       @Param("today") LocalDate today,
+      @Param("status") TodoStatus status,
       @Param("cursorDate") LocalDate cursorDate,
       @Param("cursorId") Long cursorId,
       Pageable pageable);
@@ -133,17 +136,20 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       "AND ti.targetDate < :today AND ti.status = :status")
   int countMissedTodos(@Param("userId") Long userId, @Param("today") LocalDate today, @Param("status") TodoStatus status);
 
-  @Query("SELECT ti FROM TodoInstance ti " +
-      "WHERE ti.room.id = :roomId " +
+  /**
+   * [완료된 할 일 조회 - 무한 스크롤]
+   * 정렬 기준: completedAt DESC (최신 완료순)
+   * 커서: 완료일시_ID (LocalDateTime_Long)
+   */
+  @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId " +
       "AND ti.status = :status " +
-      "AND (:cursorDateTime IS NULL " +
-      "     OR ti.completedAt < :cursorDateTime " +
-      "     OR (ti.completedAt = :cursorDateTime AND ti.id < :cursorId)) " +
+      "AND (:cursorDateTime IS NULL OR " +
+      "    (ti.completedAt < :cursorDateTime OR (ti.completedAt = :cursorDateTime AND ti.id < :cursorId))) " +
       "ORDER BY ti.completedAt DESC, ti.id DESC")
   Slice<TodoInstance> findCompletedTodosWithCursor(
       @Param("roomId") Long roomId,
       @Param("status") TodoStatus status,
-      @Param("cursorDateTime") LocalDateTime cursorDateTime,
+      @Param("cursorDateTime") LocalDateTime cursorDateTime, // 다시 LocalDateTime으로!
       @Param("cursorId") Long cursorId,
       Pageable pageable
   );
