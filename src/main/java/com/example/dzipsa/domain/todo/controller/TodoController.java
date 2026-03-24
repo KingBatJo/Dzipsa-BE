@@ -6,6 +6,7 @@ import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
 import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
+import com.example.dzipsa.domain.todo.dto.response.TodoNudgeResponse;
 import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
 import com.example.dzipsa.domain.todo.service.TodoBatchService;
 import com.example.dzipsa.domain.todo.service.TodoService;
@@ -133,16 +134,26 @@ public class TodoController {
   }
 
   /**
-   * [우리집 할 일 - 오늘 할 일 조회]
-   * URL: GET /api/todos/room/today
-   * 방 멤버 전체의 오늘 할 일 목록을 생성순으로 조회
+   * [우리집 할 일 - 상단 통계 및 넛지 가이드 조회]
+   * URL: GET /api/todos/room/stats
    */
-  @Operation(summary = "우리집 할 일 - 오늘 할 일 및 넛지 조회", description = "우리 집 구성원의 오늘 할 일과 요약(진행률) 정보를 조회합니다.")
+  @Operation(summary = "우리집 할 일 - 넛지 및 통계 조회", description = "상단 넛지 가이드와 탭별 할 일 숫자, 구성원별 통계를 조회합니다.")
+  @GetMapping("/room/stats")
+  public ResponseEntity<TodoNudgeResponse> getRoomTodoStats(
+      @AuthenticationPrincipal User user) {
+    return ResponseEntity.ok(todoService.getRoomTodoStats(user.getId()));
+  }
+
+  /**
+   * [우리집 할 일 - 오늘 할 일 리스트 조회]
+   * URL: GET /api/todos/room/today
+   */
+  @Operation(summary = "우리집 할 일 - 오늘 할 일 리스트 조회", description = "우리 집 구성원의 오늘 할 일 목록만 페이징하여 조회합니다.")
   @GetMapping("/room/today")
-  public ResponseEntity<RoomTodoResponse> getRoomTodoList(
+  public ResponseEntity<MyTodoListResponse.PagedTodoResponse> getRoomTodayTodoList(
       @AuthenticationPrincipal User user,
       @Parameter(description = "이전 페이지 마지막 데이터의 ID") @RequestParam(required = false) String cursor) {
-    return ResponseEntity.ok(todoService.getRoomTodoList(user.getId(), cursor));
+    return ResponseEntity.ok(todoService.getRoomTodayTodoList(user.getId(), cursor));
   }
 
   /**

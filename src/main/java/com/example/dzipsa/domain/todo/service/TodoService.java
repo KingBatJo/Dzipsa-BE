@@ -2,13 +2,8 @@ package com.example.dzipsa.domain.todo.service;
 
 import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
-import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
-import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
+import com.example.dzipsa.domain.todo.dto.response.*;
 import com.example.dzipsa.domain.user.entity.User;
-import java.util.List;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface TodoService {
@@ -30,8 +25,17 @@ public interface TodoService {
   // 나의 할 일 - 예정된 할 일
   MyTodoListResponse.PagedTodoResponse getUpcomingTodos(Long userId, String cursor);
 
-  // 우리집 할 일 - 오늘 할 일
-  RoomTodoResponse getRoomTodoList(Long userId, String cursor);
+  /**
+   * [우리 집 할 일 - 상단 넛지 및 섹션별 숫자 통계]
+   * ServiceImpl의 @Override 에러 해결을 위해 추가
+   */
+  TodoNudgeResponse getRoomTodoStats(Long userId);
+
+  /**
+   * [우리 집 할 일 - 오늘 할 일 리스트만 조회]
+   * 기존 RoomTodoResponse 대신 PagedTodoResponse를 반환하도록 수정
+   */
+  MyTodoListResponse.PagedTodoResponse getRoomTodayTodoList(Long userId, String cursor);
 
   // 우리집 할 일 - 지연된 할 일
   MyTodoListResponse.PagedTodoResponse getRoomDelayedTodo(Long userId, String cursor);

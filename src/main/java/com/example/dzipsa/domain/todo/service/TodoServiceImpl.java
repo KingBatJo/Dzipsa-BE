@@ -7,12 +7,7 @@ import com.example.dzipsa.domain.room.repository.RoomRepository;
 import com.example.dzipsa.domain.todo.converter.TodoConverter;
 import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
-import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
-import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoNudgeResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
+import com.example.dzipsa.domain.todo.dto.response.*;
 import com.example.dzipsa.domain.todo.entity.Todo;
 import com.example.dzipsa.domain.todo.entity.TodoInstance;
 import com.example.dzipsa.domain.todo.entity.enums.RecurringType;
@@ -240,38 +235,79 @@ public class TodoServiceImpl implements TodoService {
   }
 
   /**
-   * [우리 집 할 일 - 오늘 할 일 & 넛지 데이터]
+   * [우리 집 할 일 - 상단 넛지 및 섹션별 숫자 통계]
    */
   @Override
-  public RoomTodoResponse getRoomTodoList(Long userId, String cursor) {
+  public TodoNudgeResponse getRoomTodoStats(Long userId) {
     Long roomId = getActiveRoomMember(userId).getRoomId();
     LocalDate today = LocalDate.now();
 
-    // 넛지용 전체 카운트 계산
+    // 1. 넛지 가이드 및 섹션별 전체 카운트 계산
+    // 오늘 전체 할 일 (진행 중 + 완료)
     List<TodoInstance> totalTodayInstances = todoInstanceRepository.findRoomTodayTodos(roomId, today);
-
-    // 무한스크롤용 페이징 조회 (10개 고정)
-    PageRequest pageRequest = PageRequest.of(0, 10);
-    Long cursorId = (cursor == null || cursor.isBlank()) ? 0L : Long.parseLong(cursor);
-    Slice<TodoInstance> todaySlice = todoInstanceRepository.findRoomTodayTodosWithCursor(roomId, today, cursorId, pageRequest);
-
-    int totalCount = totalTodayInstances.size();
-    int completedCount = (int) totalTodayInstances.stream()
+    int totalTodayCount = totalTodayInstances.size();
+    int completedTodayCount = (int) totalTodayInstances.stream()
         .filter(ti -> ti.getStatus() == TodoStatus.COMPLETED).count();
     int myRemainingCount = (int) totalTodayInstances.stream()
         .filter(ti -> ti.getActualAssignee().getId().equals(userId))
         .filter(ti -> ti.getStatus() == TodoStatus.PENDING).count();
 
-    TodoNudgeResponse nudgeInfo = TodoNudgeResponse.builder()
-        .totalRoomTodoCount(totalCount)
-        .completedRoomTodoCount(completedCount)
-        .myRemainingTodoCount(myRemainingCount)
-        .build();
+    // 지연된 할 일 카운트 (오늘 이전 날짜 & 미완료)
+    int delayedCount = (int) todoInstanceRepository.countRoomDelayedTodos(roomId, today, TodoStatus.PENDING);
 
-    return RoomTodoResponse.builder()
-        .nudgeInfo(nudgeInfo)
-        .todos(TodoConverter.toPagedResponse(todaySlice))
+    // 모든 할 일 카운트 (진행 중인 모든 상태)
+    int allCount = (int) todoInstanceRepository.countRoomAllTodos(roomId, TodoStatus.COMPLETED);
+
+    // 2. 구성원별 오늘 남은 할 일 통계 추출
+    List<RoomMember> members = roomMemberRepository.findByRoomIdAndLeftAtIsNullOrderByJoinedAtAsc(roomId);
+    List<RoomTodoResponse.MemberTodoStatsResponse> memberStats = members.stream()
+        .filter(member -> !member.getUserId().equals(userId))
+        .map(member -> {
+          // RoomMember에는 userId만 있으므로 직접 조회해서 닉네임과 프로필 정보를 가져옴
+          User u = userRepository.findById(member.getUserId())
+              .orElseThrow(() -> new BusinessException(TodoErrorCode.ASSIGNEE_NOT_FOUND));
+
+          // 오늘 것만 세는 게 아니라, 해당 유저의 모든 미완료(PENDING) 인스턴스를 카운트
+          // Repository에 새로 추가한 countByActualAssigneeIdAndStatus 사용
+          int remaining = todoInstanceRepository.countTotalPendingByMember(u.getId(), TodoStatus.PENDING);
+
+          return RoomTodoResponse.MemberTodoStatsResponse.builder()
+              .userId(u.getId())
+              .nickname(u.getNickname())
+              .profileImageUrl(u.getProfileImageUrl())
+              .remainingCount(remaining)
+              .build();
+        }).collect(Collectors.toList());
+
+    // 3. 통계 응답 반환
+    return TodoNudgeResponse.builder()
+        .totalRoomTodoCount(totalTodayCount)
+        .completedRoomTodoCount(completedTodayCount)
+        .myRemainingTodoCount(myRemainingCount)
+        .todayTotalCount(totalTodayCount)
+        .delayedTotalCount(delayedCount)
+        .allTotalCount(allCount)
+        .memberStats(memberStats)
         .build();
+  }
+
+  /**
+   * [우리 집 할 일 - 오늘 할 일 리스트만 조회]
+   */
+  @Override
+  public MyTodoListResponse.PagedTodoResponse getRoomTodayTodoList(Long userId, String cursor) {
+    Long roomId = getActiveRoomMember(userId).getRoomId();
+    LocalDate today = LocalDate.now();
+
+    // 무한스크롤용 페이징 조회 (10개 고정)
+    PageRequest pageRequest = PageRequest.of(0, 10);
+    Long cursorId = (cursor == null || cursor.isBlank()) ? 0L : Long.parseLong(cursor);
+
+    // [수정] 완료된 항목 제외를 위해 TodoStatus.PENDING 파라미터 추가
+    Slice<TodoInstance> todaySlice = todoInstanceRepository.findRoomTodayTodosWithCursor(
+        roomId, today, TodoStatus.PENDING, cursorId, pageRequest);
+
+    return TodoConverter.toPagedResponse(todaySlice);
   }
 
   /**
