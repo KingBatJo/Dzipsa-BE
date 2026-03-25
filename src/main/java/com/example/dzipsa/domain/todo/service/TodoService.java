@@ -1,16 +1,10 @@
 package com.example.dzipsa.domain.todo.service;
 
 import com.example.dzipsa.domain.todo.dto.request.TodoCreateRequest;
+import com.example.dzipsa.domain.todo.dto.request.TodoDeleteRequest;
 import com.example.dzipsa.domain.todo.dto.request.TodoUpdateRequest;
-import com.example.dzipsa.domain.todo.dto.response.MyTodoListResponse;
-import com.example.dzipsa.domain.todo.dto.response.RoomTodoResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoCompletedResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoCreateResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoDetailResponse;
-import com.example.dzipsa.domain.todo.dto.response.TodoSummaryResponse;
+import com.example.dzipsa.domain.todo.dto.response.*;
 import com.example.dzipsa.domain.user.entity.User;
-import java.util.List;
-import org.springframework.data.domain.Slice;
 import org.springframework.web.multipart.MultipartFile;
 
 public interface TodoService {
@@ -19,6 +13,9 @@ public interface TodoService {
 
   // 할 일 수정
   TodoCreateResponse updateTodo(Long userId, Long todoId, TodoUpdateRequest request);
+
+  // 할 일 삭제
+  void deleteTodo(Long userId, Long instanceId, TodoDeleteRequest request);
 
   // 나의 할 일 전체 조회
   MyTodoListResponse getMyTodoList(Long userId, String missedCursor, String todayCursor, String upcomingCursor);
@@ -32,23 +29,32 @@ public interface TodoService {
   // 나의 할 일 - 예정된 할 일
   MyTodoListResponse.PagedTodoResponse getUpcomingTodos(Long userId, String cursor);
 
-  // 우리집 할 일 - 오늘 할 일
-  RoomTodoResponse getRoomTodoList(Long userId);
+  /**
+   * [우리 집 할 일 - 상단 넛지 및 섹션별 숫자 통계]
+   * ServiceImpl의 @Override 에러 해결을 위해 추가
+   */
+  TodoNudgeResponse getRoomTodoStats(Long userId);
+
+  /**
+   * [우리 집 할 일 - 오늘 할 일 리스트만 조회]
+   * 기존 RoomTodoResponse 대신 PagedTodoResponse를 반환하도록 수정
+   */
+  MyTodoListResponse.PagedTodoResponse getRoomTodayTodoList(Long userId, String cursor);
 
   // 우리집 할 일 - 지연된 할 일
-  List<TodoSummaryResponse> getRoomDelayedTodo(Long userId);
+  MyTodoListResponse.PagedTodoResponse getRoomDelayedTodo(Long userId, String cursor);
 
   // 우리집 할 일 - 전체 조회 (오늘+지연+예정)
-  List<TodoSummaryResponse> getRoomAllTodo(Long userId);
+  MyTodoListResponse.PagedTodoResponse getRoomAllTodo(Long userId, String cursor);
 
   // 특정 구성원의 할 일 조회
-  List<TodoSummaryResponse> getMemberTodo(Long loginUserId, Long targetMemberId);
+  MyTodoListResponse.PagedTodoResponse getMemberTodo(Long loginUserId, Long targetMemberId, String cursor);
 
   // 내 놓친 할 일 카운트
   int getMissedTodoCount(Long userId);
 
-  // 완료된 할 일
-  Slice<TodoCompletedResponse> getCompletedTodos(Long userId, int page, int size);
+  // 완료된 할 일 목록 조회
+  MyTodoListResponse.PagedTodoResponse getCompletedTodos(Long userId, String cursor);
 
   // 할 일 완료 처리
   void completeTodo(Long userId, Long instanceId, MultipartFile image);

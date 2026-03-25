@@ -1,5 +1,6 @@
 package com.example.dzipsa.domain.todo.dto.response;
 
+import com.example.dzipsa.domain.todo.entity.enums.RecurringType;
 import com.example.dzipsa.domain.todo.entity.enums.TodoStatus;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,4 +19,7 @@ public class TodoSummaryResponse {
   private LocalDate targetDate;
   private Long delayDays;
   private String imageUrl;
+  private String completedAt;
+  private RecurringType recurringType;
+  private String repeatDays;
 }

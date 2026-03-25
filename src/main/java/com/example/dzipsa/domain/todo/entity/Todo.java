@@ -95,4 +95,20 @@ public class Todo {
     this.isActive = false;
     this.deletedAt = LocalDateTime.now();
   }
+
+  /**
+   * 반복 일정의 종료일을 업데이트하는 메서드
+   * '이후 할 일 모두 삭제' 시, 선택한 날짜의 전날로 종료일을 앞당기기 위해 사용됩니다.
+   */
+  public void updateEndDate(LocalDate endDate) {
+    this.endDate = endDate;
+  }
+
+  /**
+   * 할 일의 활성 상태를 업데이트하는 메서드 (논리 삭제용)
+   * '전체 반복 일정 삭제' 시 isActive를 false로 바꿀 때 사용됩니다.
+   */
+  public void updateIsActive(boolean isActive) {
+    this.isActive = isActive;
+  }
 }
