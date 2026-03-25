@@ -63,14 +63,13 @@ public class TodoServiceImpl implements TodoService {
     // 날짜 유효성 검증 (시작일이 종료일보다 늦으면 예외 발생)
     validateTodoDates(request.getStartDate(), request.getEndDate());
 
-    // 1. 기본 설정 및 Todo 저장
+    // 1. 내 방 정보 조회
     RoomMember myMember = getActiveRoomMember(user.getId());
     Room myRoom = findRoomById(myMember.getRoomId());
 
-    User targetAssignee = (request.getAssigneeId() != null)
-        ? userRepository.findById(request.getAssigneeId())
-        .orElseThrow(() -> new BusinessException(TodoErrorCode.ASSIGNEE_NOT_FOUND))
-        : user;
+    // 담당자 유효성 검증 및 요일/날짜 형식 검증 추가
+    User targetAssignee = validateAndGetAssignee(request.getAssigneeId(), myRoom.getId(), user);
+    validateRepeatDays(request.getRecurringType(), request.getRepeatDays());
 
     // 반복 여부에 따른 시작 날짜 결정 (NONE이면 targetDate가 곧 시작일)
     LocalDate finalStartDate = (request.getRecurringType() == RecurringType.NONE)
@@ -133,11 +132,9 @@ public class TodoServiceImpl implements TodoService {
     Todo todo = todoRepository.findById(todoId)
         .orElseThrow(() -> new BusinessException(TodoErrorCode.TODO_NOT_FOUND));
 
-    // 2. 담당자 확인
-    User newAssignee = (request.getAssigneeId() != null)
-        ? userRepository.findById(request.getAssigneeId())
-        .orElseThrow(() -> new BusinessException(TodoErrorCode.ASSIGNEE_NOT_FOUND))
-        : todo.getDefaultAssignee();
+    // 담당자 유효성 검증 (해당 방의 멤버인지) 및 형식 검증 추가
+    User newAssignee = validateAndGetAssignee(request.getAssigneeId(), todo.getRoom().getId(), todo.getDefaultAssignee());
+    validateRepeatDays(request.getRecurringType(), request.getRepeatDays());
 
     // 수정 시 반복 여부에 따른 시작 날짜 재결정
     LocalDate finalStartDate = (request.getRecurringType() == RecurringType.NONE)
@@ -707,6 +704,42 @@ public class TodoServiceImpl implements TodoService {
     boolean isAssignee = instance.getActualAssignee().getId().equals(userId);
     if (!isAssignee) {
       throw new BusinessException(TodoErrorCode.FORBIDDEN_DELETE);
+    }
+  }
+
+  /**
+   * 담당자가 해당 방에 실제로 참여 중인 멤버인지 검증
+   */
+  private User validateAndGetAssignee(Long assigneeId, Long roomId, User fallbackUser) {
+    if (assigneeId == null) return fallbackUser;
+
+    User assignee = userRepository.findById(assigneeId)
+        .orElseThrow(() -> new BusinessException(TodoErrorCode.ASSIGNEE_NOT_FOUND));
+
+    // 해당 유저가 해당 방의 활성 멤버인지 체크
+    boolean isMember = roomMemberRepository.findByRoomIdAndUserIdAndLeftAtIsNull(roomId, assigneeId).isPresent();
+    if (!isMember) {
+      log.warn("[TodoService] 방 멤버가 아닌 유저를 담당자로 지정 시도. roomId={}, userId={}", roomId, assigneeId);
+      throw new BusinessException(TodoErrorCode.ASSIGNEE_NOT_IN_ROOM);
+    }
+
+    return assignee;
+  }
+
+  /**
+   * 반복 설정에 따른 repeatDays 값의 형식 유효성 검사 (정규식 활용)
+   */
+  private void validateRepeatDays(RecurringType type, String repeatDays) {
+    if (type == RecurringType.WEEKLY) {
+      // 주간 반복: "1,2,3" 형식 (1~7 숫자와 쉼표만 허용)
+      if (repeatDays == null || !repeatDays.matches("^[1-7](,[1-7])*$")) {
+        throw new BusinessException(TodoErrorCode.INVALID_REPEAT_DAYS);
+      }
+    } else if (type == RecurringType.MONTHLY) {
+      // 월간 반복: "1" ~ "31" 사이의 숫자 문자열만 허용
+      if (repeatDays == null || !repeatDays.matches("^([1-9]|[12][0-9]|3[01])$")) {
+        throw new BusinessException(TodoErrorCode.INVALID_REPEAT_DAYS);
+      }
     }
   }
 }
