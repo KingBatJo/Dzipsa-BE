@@ -14,6 +14,8 @@ import com.example.dzipsa.domain.room.repository.RoomInvitationRepository;
 import com.example.dzipsa.domain.room.repository.RoomMemberRepository;
 import com.example.dzipsa.domain.room.repository.RoomRepository;
 import com.example.dzipsa.domain.rule.repository.RuleWarningRepository;
+import com.example.dzipsa.domain.todo.entity.enums.TodoStatus;
+import com.example.dzipsa.domain.todo.repository.TodoInstanceRepository;
 import com.example.dzipsa.domain.todo.service.TodoService;
 import com.example.dzipsa.domain.user.entity.User;
 import com.example.dzipsa.domain.user.repository.UserRepository;
@@ -43,6 +45,7 @@ public class RoomServiceImpl implements RoomService {
     private final RuleWarningRepository ruleWarningRepository;
     private final RoomConverter roomConverter;
     private final TodoService todoService;
+    private final TodoInstanceRepository todoInstanceRepository;
 
     @Override
     @Transactional
@@ -180,6 +183,7 @@ public class RoomServiceImpl implements RoomService {
         // 2. 퇴장 처리 (Soft Delete)
         me.leave();
         room.decreaseMemberCount();
+        todoInstanceRepository.deletePendingInstancesByUserIdAndRoomId(user.getId(), room.getId(), TodoStatus.PENDING);
         log.info("[RoomService] 방 나가기 완료. roomId={}, userId={}", room.getId(), user.getId());
     }
 
@@ -289,6 +293,7 @@ public class RoomServiceImpl implements RoomService {
         // 퇴장 처리
         targetMember.leave();
         room.decreaseMemberCount();
+        todoInstanceRepository.deletePendingInstancesByUserIdAndRoomId(memberUserId, room.getId(), TodoStatus.PENDING);
         log.info("[RoomService] 구성원 내보내기 완료. targetUserId={}, roomId={}", memberUserId, room.getId());
     }
 
