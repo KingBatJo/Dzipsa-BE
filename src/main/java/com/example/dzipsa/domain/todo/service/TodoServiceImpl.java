@@ -144,6 +144,16 @@ public class TodoServiceImpl implements TodoService {
         ? request.getTargetDate()
         : request.getStartDate();
 
+    // 삭제 기준일 설정: 현재 DB에 저장된 인스턴스의 날짜와 수정 요청된 날짜 중 가장 과거를 기준으로 삭제 범위를 잡음
+    // 지연된 할 일(과거)을 수정할 수도 있으므로, 오늘과 입력받은 targetDate 중 더 과거인 날짜를 기준으로 삭제
+    LocalDate today = LocalDate.now();
+    LocalDate deleteBasisDate = today;
+
+    // 만약 수정하려는 타겟 날짜가 오늘보다 이전(지연된 할 일)이라면 해당 날짜부터 삭제 범위를 확장
+    if (request.getTargetDate() != null && request.getTargetDate().isBefore(today)) {
+      deleteBasisDate = request.getTargetDate();
+    }
+
     // 3. Todo 마스터 정보 업데이트
     todo.update(
         request.getTitle(),
@@ -157,20 +167,23 @@ public class TodoServiceImpl implements TodoService {
     );
 
     // 기존 미래 인스턴스(오늘 포함) 정리 후 재생성
-    todoInstanceRepository.deleteFutureInstances(todo.getId(), LocalDate.now());
+    // deleteBasisDate를 전달하여 지연된 과거 데이터부터 싹 밀어버림
+    todoInstanceRepository.deleteFutureInstances(todo.getId(), deleteBasisDate);
 
     // 4. 요일이나 규칙이 바뀌었을 수 있으므로 배치 서비스를 호출해 인스턴스들을 재정비
+    TodoInstance representInstance = null;
     if (todo.getRecurringType() == RecurringType.NONE) {
       // 반복 없음: 수정된 targetDate에 단일 생성
-      saveInstance(todo, todo.getRoom(), newAssignee, request.getTargetDate());
+      representInstance = saveInstance(todo, todo.getRoom(), newAssignee, request.getTargetDate());
     } else {
       // 오늘부터 향후 14일간의 데이터를 수정된 규칙에 맞게 생성/갱신
-      todoBatchService.generateInstancesRange(todo, LocalDate.now(), LocalDate.now().plusDays(14));
-    }
+      // 생성 시작점은 오늘로 잡아야 중복 생성 및 과거 불필요 데이터 생성을 방지함
+      todoBatchService.generateInstancesRange(todo, today, today.plusDays(14));
 
-    // 5. 수정한 직후 오늘 수행해야 할 인스턴스가 있는지 다시 조회
-    TodoInstance representInstance = todoInstanceRepository.findByTodoIdAndTargetDate(todo.getId(), LocalDate.now())
-        .orElse(null);
+      // 수정한 직후 오늘 수행해야 할 인스턴스가 있는지 다시 조회
+      representInstance = todoInstanceRepository.findByTodoIdAndTargetDate(todo.getId(), today)
+          .orElse(null);
+    }
 
     // 응답용 targetDate 직접 계산 (로직 분리)
     LocalDate responseTargetDate = (representInstance != null)
