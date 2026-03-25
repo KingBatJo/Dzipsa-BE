@@ -10,6 +10,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional; // 추가
 
 import java.time.LocalDate;
 import java.util.List;
@@ -72,7 +73,6 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
 
   /**
    * [우리집 할 일 - 오늘 할 일 - 무한 스크롤]
-   * 상태(status) 필터를 추가하여 '완료'된 항목 등을 제외할 수 있음
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId AND ti.targetDate = :today " +
       "AND ti.status = :status AND ti.id > :cursorId " +
@@ -129,14 +129,12 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
 
   /**
    * [우리집 할 일 - 상단 넛지 통계용 (오늘 전체 리스트)]
-   * 에러 해결: 서비스에서 호출하는 인자 2개 버전 유지 (오늘 전체 할 일 개수 계산용)
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId AND ti.targetDate = :today")
   List<TodoInstance> findRoomTodayTodos(@Param("roomId") Long roomId, @Param("today") LocalDate today);
 
   /**
    * [우리집 할 일 - 상단 넛지 통계용 (상태 필터링 포함)]
-   * 특정 상태의 오늘 할 일 리스트를 가져올 때 사용
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId " +
       "AND ti.targetDate = :today AND ti.status = :status")
@@ -154,8 +152,6 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
 
   /**
    * [완료된 할 일 조회 - 무한 스크롤]
-   * 정렬 기준: completedAt DESC (최신 완료순)
-   * 커서: 완료일시_ID (LocalDateTime_Long)
    */
   @Query("SELECT ti FROM TodoInstance ti WHERE ti.room.id = :roomId " +
       "AND ti.status = :status " +
@@ -179,10 +175,6 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
   List<TodoInstance> findAllByRoomIdAndStatusNot(Long roomId, TodoStatus status);
   List<TodoInstance> findAllByTodoIdAndTargetDateAfter(Long todoId, LocalDate today);
 
-  /**
-   * [우리집 할 일 - 지연된 할 일 개수 조회]
-   * 오늘 이전이면서 완료되지 않은(PENDING/DELAYED 등) 할 일의 개수
-   */
   @Query("SELECT COUNT(ti) FROM TodoInstance ti WHERE ti.room.id = :roomId " +
       "AND ti.targetDate < :today AND ti.status = :status")
   long countRoomDelayedTodos(
@@ -191,10 +183,6 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       @Param("status") TodoStatus status
   );
 
-  /**
-   * [우리집 할 일 - 모든 할 일 개수 조회]
-   * 특정 상태(예: DELETED 등)를 제외한 모든 할 일의 개수
-   */
   @Query("SELECT COUNT(ti) FROM TodoInstance ti WHERE ti.room.id = :roomId " +
       "AND ti.status != :status")
   long countRoomAllTodos(
@@ -202,16 +190,9 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       @Param("status") TodoStatus status
   );
 
-  /**
-   * [구성원 통계용] 특정 담당자의 모든 미완료 할 일 개수 (날짜 상관없음)
-   */
   @Query("SELECT COUNT(ti) FROM TodoInstance ti WHERE ti.actualAssignee.id = :userId AND ti.status = :status")
   int countTotalPendingByMember(@Param("userId") Long userId, @Param("status") TodoStatus status);
 
-  /**
-   * [할 일 삭제 - SINCE_THIS]
-   * 특정 날짜 이후의 미완료(PENDING) 인스턴스들을 물리 삭제
-   */
   @Modifying
   @Query("DELETE FROM TodoInstance ti WHERE ti.todo.id = :todoId " +
       "AND ti.targetDate >= :targetDate AND ti.status = :status")
@@ -221,14 +202,23 @@ public interface TodoInstanceRepository extends JpaRepository<TodoInstance, Long
       @Param("status") TodoStatus status
   );
 
-  /**
-   * [할 일 삭제 - ALL_RECURRING]
-   * 해당 Todo의 모든 미완료(PENDING) 인스턴스들을 물리 삭제
-   */
   @Modifying
   @Query("DELETE FROM TodoInstance ti WHERE ti.todo.id = :todoId AND ti.status = :status")
   void deleteAllByTodoIdAndStatus(
       @Param("todoId") Long todoId,
+      @Param("status") TodoStatus status
+  );
+
+  // 방 나가기 시 해당 유저의 PENDING 할 일 물리 삭제
+  @Modifying
+  @Transactional
+  @Query("DELETE FROM TodoInstance ti " +
+      "WHERE ti.actualAssignee.id = :userId " +
+      "AND ti.room.id = :roomId " +
+      "AND ti.status = :status")
+  void deletePendingInstancesByUserIdAndRoomId(
+      @Param("userId") Long userId,
+      @Param("roomId") Long roomId,
       @Param("status") TodoStatus status
   );
 }
