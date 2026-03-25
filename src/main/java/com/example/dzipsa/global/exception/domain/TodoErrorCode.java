@@ -13,11 +13,13 @@ public enum TodoErrorCode implements ApiCode {
   // 400 Bad Request
   INVALID_RECURRING_PARS(HttpStatus.BAD_REQUEST.value(), 540001, "반복 설정 파라미터가 유효하지 않습니다."),
   INVALID_DATE_RANGE(HttpStatus.BAD_REQUEST.value(), 540002, "종료일은 시작일보다 빠를 수 없습니다."),
+  INVALID_REPEAT_DAYS(HttpStatus.BAD_REQUEST.value(), 540003, "반복 요일 또는 날짜 형식이 올바르지 않습니다. (예: 주간 '1,2', 월간 '15')"),
 
   // 403 Forbidden
   FORBIDDEN_UPDATE_LIMIT(HttpStatus.FORBIDDEN.value(), 540301, "본인에게 할당된 할 일만 상태를 변경하거나 완료할 수 있습니다."),
   FORBIDDEN_IMAGE_DELETE(HttpStatus.FORBIDDEN.value(), 540302, "본인이 등록한 인증샷만 삭제할 수 있습니다."),
   FORBIDDEN_DELETE(HttpStatus.FORBIDDEN.value(), 540303, "담당자만 해당 할 일을 삭제할 수 있습니다."),
+  ASSIGNEE_NOT_IN_ROOM(HttpStatus.FORBIDDEN.value(), 540304, "해당 방에 소속된 멤버만 담당자로 지정할 수 있습니다."),
 
   // 404 Not Found
   TODO_NOT_FOUND(HttpStatus.NOT_FOUND.value(), 540401, "해당 할 일 마스터 정보를 찾을 수 없습니다."),
